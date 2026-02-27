@@ -1,0 +1,6 @@
+{
+  "OLD_AGE_PENSION": {
+    "min_age": 60,
+    "required_fields": ["name", "age", "address"]
+  }
+}
