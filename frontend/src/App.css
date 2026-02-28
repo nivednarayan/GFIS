@@ -1,0 +1,88 @@
+.app-shell {
+  height: 100vh;
+  width: 100vw;
+  font-family: Arial, sans-serif;
+  background: #f5f7fb;
+  color: #1b1f2a;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-header {
+  background: #ffffff;
+  border-bottom: 1px solid #e6e9ef;
+  padding: 1rem 1.25rem;
+}
+
+.app-header h1 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1.2rem;
+}
+
+.app-nav {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.app-nav a {
+  text-decoration: none;
+  color: #1f4ed8;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+}
+
+.app-nav a.active {
+  background: #dbeafe;
+}
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  overflow: auto;
+  padding: 0;
+}
+
+.page {
+  background: #ffffff;
+  border: none;
+  border-radius: 0;
+  padding: 1.25rem;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.page h2 {
+  margin-top: 0;
+}
+
+.page-links {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.page-links a {
+  text-decoration: none;
+  color: #0f172a;
+  background: #e2e8f0;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+}
+
+.page--centered {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.page--centered .page-links {
+  justify-content: center;
+}
