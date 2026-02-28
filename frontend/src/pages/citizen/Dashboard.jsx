@@ -8,7 +8,6 @@ function Dashboard() {
       <p>Track application, apply for schemes, and check risk prediction.</p>
       <div className="page-links">
         <Link to="/citizen/apply">Apply</Link>
-        <Link to="/citizen/risk-prediction">Risk Prediction</Link>
         <Link to="/citizen/status">Application Status</Link>
       </div>
     </section>

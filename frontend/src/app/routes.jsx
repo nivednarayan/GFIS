@@ -4,8 +4,8 @@ import Landing from '../pages/public/Landing';
 import Login from '../pages/public/Login';
 import CitizenDashboard from '../pages/citizen/Dashboard';
 import Apply from '../pages/citizen/Apply';
-import RiskPrediction from '../pages/citizen/RiskPrediction';
 import Status from '../pages/citizen/Status';
+import SchemeAssist from '../pages/citizen/SchemeAssist';
 import OfficerDashboard from '../pages/officer/Dashboard';
 import ReviewApplication from '../pages/officer/ReviewApplication';
 import Analytics from '../pages/admin/Analytics';
@@ -32,8 +32,7 @@ function AppRoutes() {
 
 					<Route path="/citizen" element={<CitizenDashboard />} />
 					<Route path="/citizen/apply" element={<Apply />} />
-					<Route path="/citizen/risk-prediction" element={<RiskPrediction />} />
-					<Route path="/citizen/status" element={<Status />} />
+					<Route path="/citizen/apply/:schemeId" element={<SchemeAssist />} />
 
 					<Route path="/officer" element={<OfficerDashboard />} />
 					<Route path="/officer/review-application" element={<ReviewApplication />} />
