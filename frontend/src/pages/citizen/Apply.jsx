@@ -9,10 +9,10 @@ import pmayImg from '../../../src/assets/PMAY-G-scheme.jpg';
 function Apply() {
   const schemes = [
     { id: 1, slug: 'ayushman', name: 'Ayushman Bharat', image: ayushmanImg, category: 'Health' },
-    { id: 2, slug: 'pm-kisan', name: 'PM Kisan', image: pmKisanImg, category: 'Agriculture' },
-    { id: 3, slug: 'pmay-g', name: 'PMAY-G', image: pmayImg, category: 'Housing' },
-    { id: 4, slug: 'ignoaps', name: 'IGNOAPS', image: ignoapsImg, category: 'Pension' },
-    { id: 5, slug: 'nnms', name: 'NNMS', image: nnmsImg, category: 'Nutrition' },
+    { id: 2, slug: 'pmkisan', name: 'PM Kisan', image: pmKisanImg, category: 'Agriculture' },
+    { id: 3, slug: 'pmay', name: 'PMAY-G', image: pmayImg, category: 'Housing' },
+    { id: 4, slug: 'pension', name: 'Old Age Pension', image: ignoapsImg, category: 'Pension' },
+    { id: 5, slug: 'scholarship', name: 'Scholarship', image: nnmsImg, category: 'Education' },
   ];
 
   return (
