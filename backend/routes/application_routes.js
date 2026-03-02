@@ -114,19 +114,8 @@ router.post("/applications/:applicationId/save-answer", async (req, res) => {
       });
     }
 
-    // Save to collectedAnswers (for quick retrieval)
-    application.collectedAnswers[fieldName] = answer;
-
-    // Save to userInputs (for audit trail)
-    application.userInputs.push({
-      fieldName,
-      fieldLabel,
-      fieldType,
-      answer,
-      answeredAt: new Date(),
-    });
-
-    await application.save();
+    // Do not store answer payload in applications collection.
+    // Answers are persisted only in UserInput collection.
 
     const now = new Date();
     const responsePath = `responses.${fieldName}`;
@@ -221,6 +210,57 @@ router.post("/applications/:applicationId/submit", async (req, res) => {
 
     // Update application with merged answers
     application.collectedAnswers = mergedAnswers;
+    let totalAnswers = 0;
+
+    // Persist final answers only in UserInput collection
+    if (collectedAnswers) {
+      const now = new Date();
+      const responseEntries = Object.entries(collectedAnswers);
+
+      if (responseEntries.length > 0) {
+        const historyEntries = responseEntries.map(([fieldName, answer]) => ({
+          fieldName,
+          fieldLabel: fieldName,
+          fieldType: typeof answer,
+          answer,
+          answeredAt: now,
+        }));
+
+        const existingUserInput = await UserInput.findOne({ applicationId: application._id }).lean();
+        const mergedResponses = {
+          ...(existingUserInput?.responses || {}),
+          ...collectedAnswers,
+        };
+        totalAnswers = Object.keys(mergedResponses).length;
+
+        await UserInput.findOneAndUpdate(
+          { applicationId: application._id },
+          {
+            $set: {
+              applicationRefId: application.applicationId,
+              schemeId: application.schemeId,
+              responses: mergedResponses,
+              totalAnswers,
+              lastAnsweredAt: now,
+            },
+            $push: {
+              responsesHistory: { $each: historyEntries },
+            },
+            $setOnInsert: {
+              applicationId: application._id,
+            },
+          },
+          { upsert: true, new: true }
+        );
+
+      }
+    }
+
+    // Ensure no input payload remains in applications collection
+    application.collectedAnswers = {};
+    application.userInputs = [];
+
+    // Mark as submitted
     application.status = "submitted";
     application.submittedAt = new Date();
 
@@ -327,6 +367,21 @@ router.post("/applications/:applicationId/submit", async (req, res) => {
         },
       });
     }
+    console.log(`[SUBMIT] Application saved to MongoDB successfully`);
+    console.log(`[SUBMIT] Application ID: ${application.applicationId}, Status: ${application.status}`);
+    console.log(`[SUBMIT] Total answers saved in userinputs: ${totalAnswers}`);
+
+    res.json({
+      success: true,
+      message: "Application submitted successfully",
+      data: {
+        applicationId: application.applicationId,
+        schemeId: application.schemeId,
+        status: application.status,
+        submittedAt: application.submittedAt,
+        totalAnswers,
+      },
+    });
   } catch (error) {
     console.error("[SUBMIT] Error submitting application:", error);
     console.error("[SUBMIT] Stack:", error.stack);
@@ -361,8 +416,6 @@ router.get("/applications/:applicationId", async (req, res) => {
         schemeId: application.schemeId,
         schemeName: application.schemeName,
         status: application.status,
-        collectedAnswers: application.collectedAnswers,
-        userInputs: application.userInputs,
         groupedUserInputs: await UserInput.findOne({ applicationId: application._id }).lean(),
         submittedAt: application.submittedAt,
         createdAt: application.createdAt,
