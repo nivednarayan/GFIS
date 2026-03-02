@@ -94,6 +94,7 @@ function SchemeAssist() {
   const [collectedAnswers, setCollectedAnswers] = useState({});
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
+  const [textToSpeechEnabled, setTextToSpeechEnabled] = useState(true);
   const guidedFields = useMemo(() => (schemeData ? buildGuidedFields(schemeData) : []), [schemeData]);
   const conversationCompleted = currentStepIndex >= guidedFields.length;
 
@@ -186,6 +187,23 @@ function SchemeAssist() {
       console.error('Error reading submitted state:', err);
       return { isSubmitted: false, data: null, messages: null, appId: null };
     }
+  };
+
+  const speakText = (text) => {
+    if (!textToSpeechEnabled || !('speechSynthesis' in window)) {
+      return;
+    }
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1; // Speed: 0.5 to 2
+    utterance.pitch = 1; // Pitch: 0 to 2
+    utterance.volume = 1; // Volume: 0 to 1
+    utterance.lang = 'en-IN'; // Indian English
+
+    window.speechSynthesis.speak(utterance);
   };
 
   // Fetch scheme data on mount (do NOT create application draft yet)
@@ -294,17 +312,23 @@ function SchemeAssist() {
 
     const firstQuestion = buildQuestion(guidedFields[0], 0, guidedFields.length);
 
-    setMessages([
+    const greetingMessages = [
       {
         role: 'bot',
         text: `Hi, I will guide you step-by-step for ${schemeData.schemeName}. Please answer each question to complete your application profile.`,
       },
       { role: 'bot', text: firstQuestion },
-    ]);
+    ];
+
+    setMessages(greetingMessages);
     setChatInput('');
     setCurrentStepIndex(0);
     setCollectedAnswers({});
-  }, [schemeData, guidedFields]);
+
+    // Speak the greeting and first question
+    speakText(greetingMessages[0].text);
+    setTimeout(() => speakText(greetingMessages[1].text), 1500);
+  }, [schemeData, guidedFields, textToSpeechEnabled]);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -422,16 +446,20 @@ function SchemeAssist() {
 
         console.log('Application submitted successfully:', submitData);
 
+        const successText = `✅ Application submitted successfully! Your Reference ID is: ${submitData.data.applicationId}. You can follow up on your application status later.`;
         const successMessages = [
           ...messages,
           {
             role: 'bot',
-            text: `✅ Application submitted successfully! Your Reference ID is: ${submitData.data.applicationId}. You can follow up on your application status later.`,
+            text: successText,
           },
         ];
 
         setMessages(successMessages);
         setHasSubmitted(true);
+
+        // Speak the success message
+        speakText(successText);
 
         // Save submitted state to localStorage
         const submittedDataToSave = {
@@ -494,6 +522,11 @@ function SchemeAssist() {
       setMessages(errorMessages);
       // Save state even on validation error
       saveStateToLocalStorage(currentStepIndex, collectedAnswers, errorMessages);
+      
+      // Speak the validation error and retry question
+      speakText(validationMessage);
+      setTimeout(() => speakText(buildQuestion(currentField, currentStepIndex, guidedFields.length)), 1500);
+      
       setChatInput('');
       return;
     }
@@ -508,31 +541,43 @@ function SchemeAssist() {
     setCurrentStepIndex(nextStepIndex);
 
     let newMessages;
+    let botMessageToSpeak = '';
+    
     if (nextStepIndex < guidedFields.length) {
+      const nextQuestion = buildQuestion(guidedFields[nextStepIndex], nextStepIndex, guidedFields.length);
       newMessages = [
         ...nextMessages,
         {
           role: 'bot',
-          text: buildQuestion(guidedFields[nextStepIndex], nextStepIndex, guidedFields.length),
+          text: nextQuestion,
         },
       ];
+      botMessageToSpeak = nextQuestion;
     } else {
       const summaryLines = guidedFields.map(
         (field) => `• ${field.label}: ${updatedAnswers[field.name] || '-'}`,
       );
 
+      const summaryText = `Great, I have collected all required inputs for ${schemeData.schemeName}.\n\nSummary:\n${summaryLines.join('\n')}\n\nClick Submit Application to finalize your application.`;
       newMessages = [
         ...nextMessages,
         {
           role: 'bot',
-          text: `Great, I have collected all required inputs for ${schemeData.schemeName}.\n\nSummary:\n${summaryLines.join('\n')}\n\nClick Submit Application to finalize your application.`,
+          text: summaryText,
         },
       ];
+      botMessageToSpeak = summaryText;
     }
 
     setMessages(newMessages);
     // Save state after each successful answer (to localStorage only, not DB)
     saveStateToLocalStorage(nextStepIndex, updatedAnswers, newMessages);
+    
+    // Speak the bot message
+    if (botMessageToSpeak) {
+      speakText(botMessageToSpeak);
+    }
+    
     setChatInput('');
   };
 
@@ -618,6 +663,16 @@ function SchemeAssist() {
       <div className="voice-panel">
         <h2>{schemeData.schemeName}</h2>
         <p>Use voice input to start filling the application quickly.</p>
+        
+        <button
+          type="button"
+          className={`text-to-speech-button ${textToSpeechEnabled ? 'tts-enabled' : 'tts-disabled'}`}
+          onClick={() => setTextToSpeechEnabled(!textToSpeechEnabled)}
+          title="Toggle text-to-speech for bot prompts"
+        >
+          {textToSpeechEnabled ? '🔊 Text-to-Speech: ON' : '🔇 Text-to-Speech: OFF'}
+        </button>
+
         <button
           type="button"
           className={`mic-button ${isListening ? 'mic-button--active' : ''}`}
@@ -700,6 +755,41 @@ function SchemeAssist() {
           </button>
         </div>
       </div>
+
+      <style>{`
+        .text-to-speech-button {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border: none;
+          padding: 0.75rem 1.25rem;
+          border-radius: 6px;
+          font-size: 0.95rem;
+          font-weight: 600;
+          cursor: pointer;
+          margin-bottom: 1rem;
+          transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+          box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+          width: 100%;
+        }
+
+        .text-to-speech-button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
+        }
+
+        .text-to-speech-button:active {
+          transform: translateY(0);
+        }
+
+        .text-to-speech-button.tts-disabled {
+          background: linear-gradient(135deg, #a0a0a0 0%, #808080 100%);
+          box-shadow: 0 2px 8px rgba(128, 128, 128, 0.4);
+        }
+
+        .text-to-speech-button.tts-disabled:hover {
+          box-shadow: 0 4px 12px rgba(128, 128, 128, 0.6);
+        }
+      `}</style>
     </section>
   );
 }
