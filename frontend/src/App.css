@@ -265,6 +265,12 @@
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 0.55rem 0.65rem;
+
+.chat-input:disabled {
+  background-color: #f1f5f9;
+  cursor: not-allowed;
+  color: #64748b;
+}
 }
 
 .chat-send-button {

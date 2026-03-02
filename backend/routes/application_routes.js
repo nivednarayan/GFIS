@@ -206,6 +206,61 @@ router.post("/applications/:applicationId/submit", async (req, res) => {
         ...application.collectedAnswers,
         ...collectedAnswers,
       };
+
+      const now = new Date();
+      const responseEntries = Object.entries(collectedAnswers);
+
+      if (responseEntries.length > 0) {
+        const historyEntries = responseEntries.map(([fieldName, answer]) => ({
+          fieldName,
+          fieldLabel: fieldName,
+          fieldType: typeof answer,
+          answer,
+          answeredAt: now,
+        }));
+
+        const existingUserInput = await UserInput.findOne({ applicationId: application._id }).lean();
+        const mergedResponses = {
+          ...(existingUserInput?.responses || {}),
+          ...collectedAnswers,
+        };
+
+        await UserInput.findOneAndUpdate(
+          { applicationId: application._id },
+          {
+            $set: {
+              applicationRefId: application.applicationId,
+              schemeId: application.schemeId,
+              responses: mergedResponses,
+              totalAnswers: Object.keys(mergedResponses).length,
+              lastAnsweredAt: now,
+            },
+            $push: {
+              responsesHistory: { $each: historyEntries },
+            },
+            $setOnInsert: {
+              applicationId: application._id,
+            },
+          },
+          { upsert: true, new: true }
+        );
+
+        const existingInputMap = new Map(
+          (application.userInputs || []).map((item) => [item.fieldName, item])
+        );
+
+        responseEntries.forEach(([fieldName, answer]) => {
+          existingInputMap.set(fieldName, {
+            fieldName,
+            fieldLabel: existingInputMap.get(fieldName)?.fieldLabel || fieldName,
+            fieldType: typeof answer,
+            answer,
+            answeredAt: now,
+          });
+        });
+
+        application.userInputs = Array.from(existingInputMap.values());
+      }
     }
 
     // Mark as submitted

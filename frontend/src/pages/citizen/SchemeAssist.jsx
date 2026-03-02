@@ -296,19 +296,17 @@ function SchemeAssist() {
 
   const handleSend = async () => {
     const trimmed = chatInput.trim();
-    if (!trimmed) return;
 
-    const nextMessages = [...messages, { role: 'user', text: trimmed }];
-
-    if (!guidedFields.length) {
-      setMessages(nextMessages);
-      setChatInput('');
-      return;
-    }
-
+    // If conversation is completed, allow submit without requiring input
     if (conversationCompleted) {
       // Submit the application to backend with all collected answers
       try {
+        console.log('Submitting application with data:', {
+          applicationId,
+          collectedAnswers,
+          totalFields: Object.keys(collectedAnswers).length,
+        });
+
         const submitResponse = await fetch(
           `${API_BASE_URL}/applications/${applicationId}/submit`,
           {
@@ -323,9 +321,10 @@ function SchemeAssist() {
         }
 
         const submitData = await submitResponse.json();
+        console.log('Application submitted successfully:', submitData);
 
         const successMessages = [
-          ...nextMessages,
+          ...messages,
           {
             role: 'bot',
             text: `✅ Application submitted successfully! Your Reference ID is: ${submitData.data.applicationId}. You can follow up on your application status later.`,
@@ -333,17 +332,17 @@ function SchemeAssist() {
         ];
 
         setMessages(successMessages);
-        
+
         // Clear localStorage after successful submission
         clearStateFromLocalStorage();
         localStorage.removeItem(getStorageKey('appId'));
       } catch (err) {
         console.error('Submission error:', err);
         const errorMessages = [
-          ...nextMessages,
+          ...messages,
           {
             role: 'bot',
-            text: `❌ Failed to submit application: ${err.message}. Your answers have been saved to the draft.`,
+            text: `❌ Failed to submit application: ${err.message}. Your answers have been saved locally.`,
           },
         ];
         setMessages(errorMessages);
@@ -351,6 +350,17 @@ function SchemeAssist() {
         saveStateToLocalStorage(currentStepIndex, collectedAnswers, errorMessages);
       }
 
+      setChatInput('');
+      return;
+    }
+
+    // For regular answers, require input
+    if (!trimmed) return;
+
+    const nextMessages = [...messages, { role: 'user', text: trimmed }];
+
+    if (!guidedFields.length) {
+      setMessages(nextMessages);
       setChatInput('');
       return;
     }
@@ -530,12 +540,13 @@ function SchemeAssist() {
           <input
             type="text"
             placeholder={
-              conversationCompleted ? 'Ready to submit your application' : 'Type your answer for the current step...'
+              conversationCompleted ? 'Click Submit Application button to finalize' : 'Type your answer for the current step...'
             }
             className="chat-input"
             value={chatInput}
             onChange={(event) => setChatInput(event.target.value)}
             onKeyDown={handleInputKeyDown}
+                      disabled={conversationCompleted}
           />
           <button type="button" className="chat-send-button" onClick={handleSend}>
             {conversationCompleted ? 'Submit Application' : 'Send'}
