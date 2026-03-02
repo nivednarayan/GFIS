@@ -188,7 +188,7 @@ function SchemeAssist() {
     }
   };
 
-  // Fetch scheme data and create application on mount
+  // Fetch scheme data on mount (do NOT create application draft yet)
   useEffect(() => {
     // Guard against React.StrictMode double initialization in development
     if (initializationRef.current) return;
@@ -258,17 +258,9 @@ function SchemeAssist() {
           setCurrentStepIndex(savedState.step);
           setMessages(savedState.messages);
           setChatInput('');
-
-          // Try to fetch existing applicationId from localStorage
-          const savedAppId = localStorage.getItem(getStorageKey('appId'));
-          if (savedAppId) {
-            setApplicationId(savedAppId);
-          } else {
-            await createApplicationDraft();
-          }
+          // Do NOT restore applicationId - it will be created on submission
         } else {
-          // Start fresh - create a new application draft
-          await createApplicationDraft();
+          // Start fresh - just load the scheme, don't create application yet
           setIsLoading(false);
         }
 
@@ -382,18 +374,22 @@ function SchemeAssist() {
     if (conversationCompleted) {
       // Submit the application to backend with all collected answers
       try {
-        if (!applicationId) {
-          throw new Error('Application ID not initialized. Please refresh the page.');
+        let finalApplicationId = applicationId;
+
+        // Only create application draft if it doesn't exist yet
+        if (!finalApplicationId) {
+          console.log('Creating application draft before submission...');
+          finalApplicationId = await createApplicationDraft();
         }
 
         console.log('Submitting application with data:', {
-          applicationId,
+          applicationId: finalApplicationId,
           collectedAnswers,
           totalFields: Object.keys(collectedAnswers).length,
         });
 
         const submitResponse = await fetch(
-          `${API_BASE_URL}/applications/${applicationId}/submit`,
+          `${API_BASE_URL}/applications/${finalApplicationId}/submit`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -552,7 +548,7 @@ function SchemeAssist() {
       : 'Are you sure you want to reset the form? All entered data will be lost.';
       
     if (window.confirm(confirmMsg)) {
-      const resetFormState = async () => {
+      const resetFormState = () => {
         // Clear all state
         setCurrentStepIndex(0);
         setCollectedAnswers({});
@@ -564,12 +560,8 @@ function SchemeAssist() {
         clearStateFromLocalStorage();
         setApplicationId(null);
 
-        // Create a fresh draft so submit won't point to deleted ID
-        try {
-          await createApplicationDraft();
-        } catch (err) {
-          console.error('Error creating fresh application after reset:', err);
-        }
+        // Do NOT create a new application draft - it will be created only on actual submission
+        // This prevents unwanted entries in the database for abandoned forms
 
         // Reset messages to initial greeting
         if (guidedFields.length > 0) {
