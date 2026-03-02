@@ -92,6 +92,7 @@ function SchemeAssist() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [collectedAnswers, setCollectedAnswers] = useState({});
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [submittedData, setSubmittedData] = useState(null);
   const guidedFields = useMemo(() => (schemeData ? buildGuidedFields(schemeData) : []), [schemeData]);
   const conversationCompleted = currentStepIndex >= guidedFields.length;
 
@@ -149,8 +150,40 @@ function SchemeAssist() {
       localStorage.removeItem(getStorageKey('answers'));
       localStorage.removeItem(getStorageKey('messages'));
       localStorage.removeItem(getStorageKey('appId'));
+      localStorage.removeItem(getStorageKey('submitted'));
+      localStorage.removeItem(getStorageKey('submittedData'));
+      localStorage.removeItem(getStorageKey('submittedMessages'));
     } catch (err) {
       console.error('Error clearing localStorage:', err);
+    }
+  };
+
+  const saveSubmittedState = (appId, data, chatMessages) => {
+    try {
+      localStorage.setItem(getStorageKey('submitted'), 'true');
+      localStorage.setItem(getStorageKey('submittedData'), JSON.stringify(data));
+      localStorage.setItem(getStorageKey('submittedMessages'), JSON.stringify(chatMessages));
+      localStorage.setItem(getStorageKey('appId'), appId);
+    } catch (err) {
+      console.error('Error saving submitted state:', err);
+    }
+  };
+
+  const getSubmittedState = () => {
+    try {
+      const submitted = localStorage.getItem(getStorageKey('submitted'));
+      const data = localStorage.getItem(getStorageKey('submittedData'));
+      const chatMessages = localStorage.getItem(getStorageKey('submittedMessages'));
+      const appId = localStorage.getItem(getStorageKey('appId'));
+      return {
+        isSubmitted: submitted === 'true',
+        data: data ? JSON.parse(data) : null,
+        messages: chatMessages ? JSON.parse(chatMessages) : null,
+        appId: appId,
+      };
+    } catch (err) {
+      console.error('Error reading submitted state:', err);
+      return { isSubmitted: false, data: null, messages: null, appId: null };
     }
   };
 
@@ -169,7 +202,49 @@ function SchemeAssist() {
         const schemeInfo = await schemeResponse.json();
         setSchemeData(schemeInfo);
 
-        // Check if there's existing state in localStorage
+        // Check if application was previously submitted
+        const submittedState = getSubmittedState();
+        
+        if (submittedState.isSubmitted && submittedState.appId && submittedState.data) {
+          // Restore submitted state
+          setApplicationId(submittedState.appId);
+          setHasSubmitted(true);
+          setSubmittedData(submittedState.data);
+          
+          // Restore the original chat messages if available
+          if (submittedState.messages && submittedState.messages.length > 0) {
+            setMessages(submittedState.messages);
+          } else {
+            // Fallback: Show submitted message if no history
+            const submittedMessages = [
+              {
+                role: 'bot',
+                text: `✅ Application already submitted! Your Reference ID is: ${submittedState.appId}`,
+              },
+              {
+                role: 'bot',
+                text: 'Here is your submitted data:',
+              },
+            ];
+            
+            // Add submitted answers to messages
+            if (submittedState.data.responses) {
+              Object.entries(submittedState.data.responses).forEach(([key, value]) => {
+                submittedMessages.push({
+                  role: 'bot',
+                  text: `• ${key}: ${value}`,
+                });
+              });
+            }
+            
+            setMessages(submittedMessages);
+          }
+          
+          setIsLoading(false);
+          return;
+        }
+
+        // Check if there's existing state in localStorage (draft)
         const savedState = getStateFromLocalStorage();
 
         if (savedState.answers && savedState.step !== null && savedState.messages) {
@@ -208,9 +283,15 @@ function SchemeAssist() {
     if (!schemeData || !guidedFields.length) return;
 
     const savedState = getStateFromLocalStorage();
+    const submittedState = getSubmittedState();
 
-    // Skip greeting if restoring previous session
+    // Skip greeting if restoring previous session (either draft or submitted)
     if (savedState.messages && savedState.messages.length > 0) {
+      return;
+    }
+
+    // Skip greeting if restoring submitted application
+    if (submittedState.isSubmitted && submittedState.messages && submittedState.messages.length > 0) {
       return;
     }
 
@@ -345,9 +426,26 @@ function SchemeAssist() {
         setMessages(successMessages);
         setHasSubmitted(true);
 
-        // Clear localStorage after successful submission
-        clearStateFromLocalStorage();
-        localStorage.removeItem(getStorageKey('appId'));
+        // Save submitted state to localStorage
+        const submittedDataToSave = {
+          applicationId: submitData.data.applicationId,
+          schemeId: submitData.data.schemeId,
+          status: submitData.data.status,
+          submittedAt: submitData.data.submittedAt,
+          totalAnswers: submitData.data.totalAnswers,
+          responses: collectedAnswers,
+        };
+        saveSubmittedState(submitData.data.applicationId, submittedDataToSave, successMessages);
+        setSubmittedData(submittedDataToSave);
+
+        // Clear draft localStorage but keep submitted state
+        try {
+          localStorage.removeItem(getStorageKey('step'));
+          localStorage.removeItem(getStorageKey('answers'));
+          localStorage.removeItem(getStorageKey('messages'));
+        } catch (err) {
+          console.error('Error clearing draft state:', err);
+        }
       } catch (err) {
         console.error('Submission error:', err);
         const errorMessages = [
@@ -438,15 +536,20 @@ function SchemeAssist() {
   };
 
   const handleResetForm = () => {
-    if (window.confirm('Are you sure you want to reset the form? All entered data will be lost.')) {
+    const confirmMsg = hasSubmitted 
+      ? 'Are you sure you want to submit another form? This will start a new application.'
+      : 'Are you sure you want to reset the form? All entered data will be lost.';
+      
+    if (window.confirm(confirmMsg)) {
       const resetFormState = async () => {
-        // Clear state
+        // Clear all state
         setCurrentStepIndex(0);
         setCollectedAnswers({});
         setChatInput('');
         setHasSubmitted(false);
+        setSubmittedData(null);
 
-        // Clear localStorage (including old appId)
+        // Clear localStorage completely
         clearStateFromLocalStorage();
         setApplicationId(null);
 
@@ -588,9 +691,9 @@ function SchemeAssist() {
             type="button" 
             className="chat-reset-button" 
             onClick={handleResetForm}
-            title="Clear all entered data and start over"
+            title={hasSubmitted ? "Submit another form" : "Clear all entered data and start over"}
           >
-            Reset Form
+            {hasSubmitted ? 'Submit Another Form' : 'Reset Form'}
           </button>
         </div>
       </div>
