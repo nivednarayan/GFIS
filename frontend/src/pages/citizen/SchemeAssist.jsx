@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -81,6 +81,8 @@ function SchemeAssist() {
   const { schemeId } = useParams();
   const recognitionRef = useRef(null);
   const initializationRef = useRef(false); // Prevent React.StrictMode double initialization
+  const speedChangeTimeoutRef = useRef(null); // Debounce speed changes
+  const spokenMessagesIndexRef = useRef(-1); // Track last message that was spoken
   const [schemeData, setSchemeData] = useState(null);
   const [applicationId, setApplicationId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -192,63 +194,93 @@ function SchemeAssist() {
     }
   };
 
-  const speakText = (text) => {
+  const speakText = useCallback((text, speed = speechRate) => {
     if (!textToSpeechEnabled || !('speechSynthesis' in window)) {
       return;
     }
 
-    // Cancel any ongoing speech
+    // Immediately cancel and resume for instant response
     window.speechSynthesis.cancel();
-    setIsSpeechPaused(false); // Reset pause state when starting new speech
+    window.speechSynthesis.resume();
+    setIsSpeechPaused(false);
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = speechRate; // Use state-controlled speed: 0.5 to 2
-    utterance.pitch = 1; // Pitch: 0 to 2
-    utterance.volume = 1; // Volume: 0 to 1
-    utterance.lang = 'en-IN'; // Indian English
+    utterance.rate = speed;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    utterance.lang = 'en-IN';
+
+    // Minimal event listeners
+    utterance.onstart = () => setIsSpeechPaused(false);
+    utterance.onend = () => setIsSpeechPaused(false);
+    utterance.onerror = (event) => console.log('TTS Error:', event.error);
 
     window.speechSynthesis.speak(utterance);
-    setLastBotMessage(text); // Track the last spoken message
-  };
+    setLastBotMessage(text);
+  }, [textToSpeechEnabled, speechRate]);
 
-  const increaseSpeechRate = () => {
-    setSpeechRate(prev => Math.min(prev + 0.25, 2)); // Max 2x speed
-  };
+  const increaseSpeechRate = useCallback(() => {
+    setSpeechRate(prev => Math.min(prev + 0.25, 2));
+  }, []);
 
-  const decreaseSpeechRate = () => {
-    setSpeechRate(prev => Math.max(prev - 0.25, 0.5)); // Min 0.5x speed
-  };
+  const decreaseSpeechRate = useCallback(() => {
+    setSpeechRate(prev => Math.max(prev - 0.25, 0.5));
+  }, []);
 
-  const repeatLastPrompt = () => {
-    if (lastBotMessage) {
-      speakText(lastBotMessage);
+  const repeatLastPrompt = useCallback(() => {
+    if (lastBotMessage && textToSpeechEnabled) {
+      speakText(lastBotMessage, speechRate);
     }
-  };
+  }, [lastBotMessage, textToSpeechEnabled, speechRate, speakText]);
 
-  const pauseSpeech = () => {
-    if ('speechSynthesis' in window && window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+  const pauseSpeech = useCallback(() => {
+    if ('speechSynthesis' in window) {
       window.speechSynthesis.pause();
       setIsSpeechPaused(true);
     }
-  };
+  }, []);
 
-  const resumeSpeech = () => {
+  const resumeSpeech = useCallback(() => {
     if ('speechSynthesis' in window && window.speechSynthesis.paused) {
       window.speechSynthesis.resume();
       setIsSpeechPaused(false);
     }
-  };
+  }, []);
 
-  const toggleTextToSpeech = () => {
-    const newState = !textToSpeechEnabled;
-    setTextToSpeechEnabled(newState);
-    
-    // If turning off TTS, cancel any active speech and reset pause state
-    if (!newState && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      setIsSpeechPaused(false);
+  const toggleTextToSpeech = useCallback(() => {
+    setTextToSpeechEnabled(prev => {
+      const newState = !prev;
+      if (!newState && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        setIsSpeechPaused(false);
+      }
+      return newState;
+    });
+  }, []);
+
+  // Auto-speak all new bot messages as they appear
+  useEffect(() => {
+    if (!textToSpeechEnabled || messages.length === 0) return;
+
+    // Find all new bot messages that haven't been spoken yet
+    const newBotMessages = messages
+      .slice(spokenMessagesIndexRef.current + 1)
+      .filter(msg => msg.role === 'bot')
+      .map(msg => msg.text);
+
+    // Speak each new message in sequence
+    if (newBotMessages.length > 0) {
+      let delayMs = 0;
+      newBotMessages.forEach((text, idx) => {
+        setTimeout(() => speakText(text), delayMs);
+        // Queue each message with a small delay to ensure proper sequencing
+        delayMs += Math.max(500, (text.length / 10) * 100); // Base delay + text length
+      });
+
+      // Update the index of the last spoken message
+      spokenMessagesIndexRef.current = messages.length - 1;
     }
-  };
+  }, [messages, textToSpeechEnabled, speakText]);
 
   // Fetch scheme data on mount (do NOT create application draft yet)
   useEffect(() => {
@@ -305,6 +337,8 @@ function SchemeAssist() {
             }
             
             setMessages(submittedMessages);
+                      // Mark all submitted messages as already spoken (to prevent re-speaking)
+                      spokenMessagesIndexRef.current = submittedMessages.length - 1;
           }
           
           setIsLoading(false);
@@ -321,6 +355,8 @@ function SchemeAssist() {
           setMessages(savedState.messages);
           setChatInput('');
           // Do NOT restore applicationId - it will be created on submission
+                  // Mark all restored messages as already spoken (to prevent re-speaking)
+                  spokenMessagesIndexRef.current = savedState.messages.length - 1;
         } else {
           // Start fresh - just load the scheme, don't create application yet
           setIsLoading(false);
@@ -369,10 +405,10 @@ function SchemeAssist() {
     setCurrentStepIndex(0);
     setCollectedAnswers({});
 
-    // Speak the greeting and first question
-    speakText(greetingMessages[0].text);
-    setTimeout(() => speakText(greetingMessages[1].text), 1500);
-  }, [schemeData, guidedFields, textToSpeechEnabled]);
+    
+    // Reset spoken messages index for new conversation
+    spokenMessagesIndexRef.current = -1;
+  }, [schemeData, guidedFields]);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -502,9 +538,6 @@ function SchemeAssist() {
         setMessages(successMessages);
         setHasSubmitted(true);
 
-        // Speak the success message
-        speakText(successText);
-
         // Save submitted state to localStorage
         const submittedDataToSave = {
           applicationId: submitData.data.applicationId,
@@ -567,10 +600,6 @@ function SchemeAssist() {
       // Save state even on validation error
       saveStateToLocalStorage(currentStepIndex, collectedAnswers, errorMessages);
       
-      // Speak the validation error and retry question
-      speakText(validationMessage);
-      setTimeout(() => speakText(buildQuestion(currentField, currentStepIndex, guidedFields.length)), 1500);
-      
       setChatInput('');
       return;
     }
@@ -616,11 +645,6 @@ function SchemeAssist() {
     setMessages(newMessages);
     // Save state after each successful answer (to localStorage only, not DB)
     saveStateToLocalStorage(nextStepIndex, updatedAnswers, newMessages);
-    
-    // Speak the bot message
-    if (botMessageToSpeak) {
-      speakText(botMessageToSpeak);
-    }
     
     setChatInput('');
   };
