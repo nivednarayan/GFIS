@@ -1,0 +1,32 @@
+[
+  {
+    "schemeId": "pmay",
+    "schemeName": "Pradhan Mantri Awas Yojana",
+    "category": "Housing",
+    "description": "Housing subsidy for economically weaker sections"
+  },
+  {
+    "schemeId": "pmkisan",
+    "schemeName": "PM-KISAN",
+    "category": "Agriculture",
+    "description": "Income support scheme for farmers"
+  },
+  {
+    "schemeId": "pension",
+    "schemeName": "Old Age / Widow Pension (NSAP)",
+    "category": "Social Welfare",
+    "description": "Monthly pension for eligible citizens"
+  },
+  {
+    "schemeId": "ayushman",
+    "schemeName": "Ayushman Bharat",
+    "category": "Health",
+    "description": "Health insurance scheme for low income families"
+  },
+  {
+    "schemeId": "scholarship",
+    "schemeName": "Post Matric Scholarship",
+    "category": "Education",
+    "description": "Financial assistance for students"
+  }
+]

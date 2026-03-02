@@ -1,0 +1,45 @@
+{
+  "schemeId": "pmay",
+  "schemeName": "Pradhan Mantri Awas Yojana",
+  "fields": [
+    {
+      "name": "fullName",
+      "label": "Full Name",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "aadhaar",
+      "label": "Aadhaar Number",
+      "type": "text",
+      "required": true,
+      "validation": {
+        "pattern": "^[0-9]{12}$",
+        "message": "Aadhaar must be 12 digits"
+      }
+    },
+    {
+      "name": "houseOwnership",
+      "label": "Do you own a pucca house?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "required": true
+    },
+    {
+      "name": "annualIncome",
+      "label": "Annual Family Income",
+      "type": "number",
+      "required": true
+    }
+  ],
+  "requiredDocuments": [
+    "Aadhaar Card",
+    "Income Certificate",
+    "Address Proof",
+    "Bank Passbook"
+  ],
+  "eligibilityRules": {
+    "maxIncome": 300000,
+    "mustNotOwnPuccaHouse": true
+  }
+}

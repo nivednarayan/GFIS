@@ -1,0 +1,61 @@
+{
+  "schemeId": "pmkisan",
+  "schemeName": "PM-KISAN",
+  "fields": [
+    {
+      "name": "fullName",
+      "label": "Full Name (as per Aadhaar)",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "aadhaar",
+      "label": "Aadhaar Number",
+      "type": "text",
+      "required": true,
+      "validation": {
+        "pattern": "^[0-9]{12}$",
+        "message": "Aadhaar must be 12 digits"
+      }
+    },
+    {
+      "name": "mobileNumber",
+      "label": "Mobile Number",
+      "type": "text",
+      "required": true,
+      "validation": {
+        "pattern": "^[0-9]{10}$",
+        "message": "Mobile number must be 10 digits"
+      }
+    },
+    {
+      "name": "landOwnership",
+      "label": "Do you own cultivable land?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "required": true
+    },
+    {
+      "name": "areaOfLand",
+      "label": "Area of Land (in acres)",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "annualIncome",
+      "label": "Annual Agricultural Income",
+      "type": "number",
+      "required": true
+    }
+  ],
+  "requiredDocuments": [
+    "Aadhaar Card",
+    "Land Ownership Certificate",
+    "Bank Passbook",
+    "Land Record Document"
+  ],
+  "eligibilityRules": {
+    "maxLandHolding": 2,
+    "minAge": 18
+  }
+}

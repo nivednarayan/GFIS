@@ -3,12 +3,16 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 
 const validationRoutes = require("./routes/validation_routes");
+const schemeRoutes = require("./routes/scheme_routes");
+const applicationRoutes = require("./routes/application_routes");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use("/api", validationRoutes);
+app.use("/api", schemeRoutes);
+app.use("/api", applicationRoutes);
 
 // Connect to MongoDB
 mongoose.connect("mongodb://127.0.0.1:27017/gfis")

@@ -1,0 +1,56 @@
+{
+  "schemeId": "scholarship",
+  "schemeName": "Post Matric Scholarship",
+  "fields": [
+    {
+      "name": "studentName",
+      "label": "Student Name",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "aadhaar",
+      "label": "Aadhaar Number",
+      "type": "text",
+      "required": true,
+      "validation": {
+        "pattern": "^[0-9]{12}$",
+        "message": "Aadhaar must be 12 digits"
+      }
+    },
+    {
+      "name": "institution",
+      "label": "Institution Name",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "course",
+      "label": "Course Name",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "percentage",
+      "label": "Previous Exam Percentage",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "annualIncome",
+      "label": "Family Annual Income",
+      "type": "number",
+      "required": true
+    }
+  ],
+  "requiredDocuments": [
+    "Aadhaar Card",
+    "Income Certificate",
+    "Caste Certificate",
+    "Mark Sheet"
+  ],
+  "eligibilityRules": {
+    "maxIncome": 250000,
+    "minPercentage": 50
+  }
+}

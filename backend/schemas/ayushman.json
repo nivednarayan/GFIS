@@ -1,0 +1,42 @@
+{
+  "schemeId": "ayushman",
+  "schemeName": "Ayushman Bharat",
+  "fields": [
+    {
+      "name": "fullName",
+      "label": "Full Name",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "aadhaar",
+      "label": "Aadhaar Number",
+      "type": "text",
+      "required": true,
+      "validation": {
+        "pattern": "^[0-9]{12}$",
+        "message": "Aadhaar must be 12 digits"
+      }
+    },
+    {
+      "name": "rationCard",
+      "label": "Ration Card Number",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "familyMembers",
+      "label": "Number of Family Members",
+      "type": "number",
+      "required": true
+    }
+  ],
+  "requiredDocuments": [
+    "Aadhaar Card",
+    "Ration Card",
+    "Income Certificate"
+  ],
+  "eligibilityRules": {
+    "mustBeBPL": true
+  }
+}
