@@ -80,6 +80,7 @@ const validateFieldInput = (field, value) => {
 function SchemeAssist() {
   const { schemeId } = useParams();
   const recognitionRef = useRef(null);
+  const initializationRef = useRef(false); // Prevent React.StrictMode double initialization
   const [schemeData, setSchemeData] = useState(null);
   const [applicationId, setApplicationId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -189,6 +190,10 @@ function SchemeAssist() {
 
   // Fetch scheme data and create application on mount
   useEffect(() => {
+    // Guard against React.StrictMode double initialization in development
+    if (initializationRef.current) return;
+    initializationRef.current = true;
+
     const initializeApplication = async () => {
       try {
         setIsLoading(true);
@@ -377,6 +382,10 @@ function SchemeAssist() {
     if (conversationCompleted) {
       // Submit the application to backend with all collected answers
       try {
+        if (!applicationId) {
+          throw new Error('Application ID not initialized. Please refresh the page.');
+        }
+
         console.log('Submitting application with data:', {
           applicationId,
           collectedAnswers,
@@ -408,11 +417,13 @@ function SchemeAssist() {
           return;
         }
 
+        const submitData = await submitResponse.json();
+
         if (!submitResponse.ok) {
-          throw new Error('Failed to submit application');
+          const errorMessage = submitData.error || submitData.message || 'Failed to submit application';
+          throw new Error(`[${submitResponse.status}] ${errorMessage}`);
         }
 
-        const submitData = await submitResponse.json();
         console.log('Application submitted successfully:', submitData);
 
         const successMessages = [
