@@ -200,8 +200,7 @@
   border-radius: 10px;
   padding: 0.75rem;
   background: #ffffff;
-  min-height: 420px;
-  max-height: 520px;
+  max-height: 280px;
   overflow: auto;
 }
 
@@ -265,12 +264,12 @@
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 0.55rem 0.65rem;
+}
 
 .chat-input:disabled {
   background-color: #f1f5f9;
   cursor: not-allowed;
   color: #64748b;
-}
 }
 
 .chat-send-button {
@@ -298,6 +297,14 @@
 
 .chat-send-button:hover {
   background: #1e40af;
+}
+
+.chat-submitted-badge {
+  border-radius: 8px;
+  background: #16a34a;
+  color: #ffffff;
+  padding: 0.55rem 0.9rem;
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {
