@@ -190,15 +190,22 @@ router.post("/applications/:applicationId/submit", async (req, res) => {
 
     console.log(`[SUBMIT] Received submission for application: ${applicationId}`);
     console.log(`[SUBMIT] Collected answers:`, collectedAnswers);
+    console.log(`[SUBMIT] Received body:`, req.body);
 
     const application = await findApplicationByIdentifier(applicationId);
 
     if (!application) {
+      console.error(`[SUBMIT] Application not found for ID: ${applicationId}`);
+      console.error(`[SUBMIT] Attempted to find with identifiers: [${applicationId}]`);
       return res.status(404).json({
         success: false,
         message: "Application not found",
+        requestedId: applicationId,
       });
     }
+    
+    console.log(`[SUBMIT] Found application, current status: ${application.status}`);
+    console.log(`[SUBMIT] Current collectedAnswers in DB:`, application.collectedAnswers);
 
     // Update with final answers if provided
     if (collectedAnswers) {
@@ -285,11 +292,14 @@ router.post("/applications/:applicationId/submit", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error submitting application:", error);
+    console.error("[SUBMIT] Error submitting application:", error);
+    console.error("[SUBMIT] Error stack:", error.stack);
+    console.error("[SUBMIT] Error type:", error.name);
     res.status(500).json({
       success: false,
       message: "Error submitting application",
       error: error.message,
+      errorType: error.name,
     });
   }
 });

@@ -80,6 +80,7 @@ const validateFieldInput = (field, value) => {
 function SchemeAssist() {
   const { schemeId } = useParams();
   const recognitionRef = useRef(null);
+  const initializationRef = useRef(false); // Prevent React.StrictMode double initialization
   const [schemeData, setSchemeData] = useState(null);
   const [applicationId, setApplicationId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -136,6 +137,10 @@ function SchemeAssist() {
 
   // Fetch scheme data and create application on mount
   useEffect(() => {
+    // Guard against React.StrictMode double initialization in development
+    if (initializationRef.current) return;
+    initializationRef.current = true;
+
     const initializeApplication = async () => {
       try {
         setIsLoading(true);
@@ -149,39 +154,22 @@ function SchemeAssist() {
         const schemeInfo = await schemeResponse.json();
         setSchemeData(schemeInfo);
 
-        // Check if there's existing state in localStorage
-        const savedState = getStateFromLocalStorage();
+        // Check if there's existing application ID in localStorage
+        const savedAppId = localStorage.getItem(getStorageKey('appId'));
 
-        if (savedState.answers && savedState.step !== null && savedState.messages) {
-          // Restore previous session
-          setCollectedAnswers(savedState.answers);
-          setCurrentStepIndex(savedState.step);
-          setMessages(savedState.messages);
-          setChatInput('');
+        if (savedAppId) {
+          // Existing session - restore it
+          setApplicationId(savedAppId);
 
-          // Try to fetch existing applicationId from localStorage
-          const savedAppId = localStorage.getItem(getStorageKey('appId'));
-          if (savedAppId) {
-            setApplicationId(savedAppId);
-          } else {
-            // If no appId in localStorage, create new application
-            const appResponse = await fetch(`${API_BASE_URL}/applications`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ schemeId }),
-            });
-
-            if (!appResponse.ok) {
-              throw new Error('Failed to create application');
-            }
-
-            const appData = await appResponse.json();
-            const newAppId = appData.data.applicationId;
-            setApplicationId(newAppId);
-            localStorage.setItem(getStorageKey('appId'), newAppId);
+          const savedState = getStateFromLocalStorage();
+          if (savedState.answers && savedState.step !== null && savedState.messages) {
+            setCollectedAnswers(savedState.answers);
+            setCurrentStepIndex(savedState.step);
+            setMessages(savedState.messages);
+            setChatInput('');
           }
         } else {
-          // Start fresh - create a new application draft
+          // New session - create ONE application
           const appResponse = await fetch(`${API_BASE_URL}/applications`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -196,7 +184,6 @@ function SchemeAssist() {
           const newAppId = appData.data.applicationId;
           setApplicationId(newAppId);
           localStorage.setItem(getStorageKey('appId'), newAppId);
-          setIsLoading(false);
         }
 
         setIsLoading(false);
@@ -301,6 +288,10 @@ function SchemeAssist() {
     if (conversationCompleted) {
       // Submit the application to backend with all collected answers
       try {
+        if (!applicationId) {
+          throw new Error('Application ID not initialized. Please refresh the page.');
+        }
+
         console.log('Submitting application with data:', {
           applicationId,
           collectedAnswers,
@@ -316,11 +307,14 @@ function SchemeAssist() {
           },
         );
 
+        const submitData = await submitResponse.json();
+        console.log('Submit response:', submitResponse.status, submitData);
+
         if (!submitResponse.ok) {
-          throw new Error('Failed to submit application');
+          const errorMessage = submitData.error || submitData.message || 'Failed to submit application';
+          throw new Error(`[${submitResponse.status}] ${errorMessage}`);
         }
 
-        const submitData = await submitResponse.json();
         console.log('Application submitted successfully:', submitData);
 
         const successMessages = [
