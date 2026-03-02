@@ -95,6 +95,9 @@ function SchemeAssist() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
   const [textToSpeechEnabled, setTextToSpeechEnabled] = useState(true);
+  const [speechRate, setSpeechRate] = useState(1);
+  const [lastBotMessage, setLastBotMessage] = useState('');
+  const [isSpeechPaused, setIsSpeechPaused] = useState(false);
   const guidedFields = useMemo(() => (schemeData ? buildGuidedFields(schemeData) : []), [schemeData]);
   const conversationCompleted = currentStepIndex >= guidedFields.length;
 
@@ -196,14 +199,55 @@ function SchemeAssist() {
 
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
+    setIsSpeechPaused(false); // Reset pause state when starting new speech
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1; // Speed: 0.5 to 2
+    utterance.rate = speechRate; // Use state-controlled speed: 0.5 to 2
     utterance.pitch = 1; // Pitch: 0 to 2
     utterance.volume = 1; // Volume: 0 to 1
     utterance.lang = 'en-IN'; // Indian English
 
     window.speechSynthesis.speak(utterance);
+    setLastBotMessage(text); // Track the last spoken message
+  };
+
+  const increaseSpeechRate = () => {
+    setSpeechRate(prev => Math.min(prev + 0.25, 2)); // Max 2x speed
+  };
+
+  const decreaseSpeechRate = () => {
+    setSpeechRate(prev => Math.max(prev - 0.25, 0.5)); // Min 0.5x speed
+  };
+
+  const repeatLastPrompt = () => {
+    if (lastBotMessage) {
+      speakText(lastBotMessage);
+    }
+  };
+
+  const pauseSpeech = () => {
+    if ('speechSynthesis' in window && window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+      window.speechSynthesis.pause();
+      setIsSpeechPaused(true);
+    }
+  };
+
+  const resumeSpeech = () => {
+    if ('speechSynthesis' in window && window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+      setIsSpeechPaused(false);
+    }
+  };
+
+  const toggleTextToSpeech = () => {
+    const newState = !textToSpeechEnabled;
+    setTextToSpeechEnabled(newState);
+    
+    // If turning off TTS, cancel any active speech and reset pause state
+    if (!newState && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setIsSpeechPaused(false);
+    }
   };
 
   // Fetch scheme data on mount (do NOT create application draft yet)
@@ -663,15 +707,6 @@ function SchemeAssist() {
       <div className="voice-panel">
         <h2>{schemeData.schemeName}</h2>
         <p>Use voice input to start filling the application quickly.</p>
-        
-        <button
-          type="button"
-          className={`text-to-speech-button ${textToSpeechEnabled ? 'tts-enabled' : 'tts-disabled'}`}
-          onClick={() => setTextToSpeechEnabled(!textToSpeechEnabled)}
-          title="Toggle text-to-speech for bot prompts"
-        >
-          {textToSpeechEnabled ? '🔊 Text-to-Speech: ON' : '🔇 Text-to-Speech: OFF'}
-        </button>
 
         <button
           type="button"
@@ -689,7 +724,58 @@ function SchemeAssist() {
       </div>
 
       <div className="chat-panel">
-        <h3>Assistant Chat</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h3 style={{ margin: 0 }}>Assistant Chat</h3>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="tts-control-button"
+              onClick={decreaseSpeechRate}
+              title="Decrease speech speed"
+              disabled={!textToSpeechEnabled || speechRate <= 0.5}
+            >
+              ⏪
+            </button>
+            <span className="speech-rate-display" title={`Current speed: ${speechRate}x`}>
+              {speechRate}x
+            </span>
+            <button
+              type="button"
+              className="tts-control-button"
+              onClick={increaseSpeechRate}
+              title="Increase speech speed"
+              disabled={!textToSpeechEnabled || speechRate >= 2}
+            >
+              ⏩
+            </button>
+            <button
+              type="button"
+              className="tts-control-button"
+              onClick={repeatLastPrompt}
+              title="Repeat last prompt"
+              disabled={!textToSpeechEnabled || !lastBotMessage}
+            >
+              🔁
+            </button>
+            <button
+              type="button"
+              className="tts-control-button"
+              onClick={isSpeechPaused ? resumeSpeech : pauseSpeech}
+              title={isSpeechPaused ? "Resume speech" : "Pause speech"}
+              disabled={!textToSpeechEnabled}
+            >
+              {isSpeechPaused ? '▶️' : '⏸️'}
+            </button>
+            <button
+              type="button"
+              className={`text-to-speech-button ${textToSpeechEnabled ? 'tts-enabled' : 'tts-disabled'}`}
+              onClick={toggleTextToSpeech}
+              title="Toggle text-to-speech for bot prompts"
+            >
+              {textToSpeechEnabled ? '🔊 ON' : '🔇 OFF'}
+            </button>
+          </div>
+        </div>
         <div className="requirements-panel">
           <h4>Information Required</h4>
           <div className="requirements-block">
@@ -761,20 +847,19 @@ function SchemeAssist() {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
           border: none;
-          padding: 0.75rem 1.25rem;
+          padding: 0.4rem 0.8rem;
           border-radius: 6px;
-          font-size: 0.95rem;
+          font-size: 0.8rem;
           font-weight: 600;
           cursor: pointer;
-          margin-bottom: 1rem;
           transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
-          box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
-          width: 100%;
+          box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+          white-space: nowrap;
         }
 
         .text-to-speech-button:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
+          transform: translateY(-1px);
+          box-shadow: 0 3px 10px rgba(102, 126, 234, 0.6);
         }
 
         .text-to-speech-button:active {
@@ -783,11 +868,46 @@ function SchemeAssist() {
 
         .text-to-speech-button.tts-disabled {
           background: linear-gradient(135deg, #a0a0a0 0%, #808080 100%);
-          box-shadow: 0 2px 8px rgba(128, 128, 128, 0.4);
+          box-shadow: 0 2px 6px rgba(128, 128, 128, 0.4);
         }
 
         .text-to-speech-button.tts-disabled:hover {
-          box-shadow: 0 4px 12px rgba(128, 128, 128, 0.6);
+          box-shadow: 0 3px 10px rgba(128, 128, 128, 0.6);
+        }
+
+        .tts-control-button {
+          background: #f0f0f0;
+          border: 1px solid #d0d0d0;
+          padding: 0.3rem 0.6rem;
+          border-radius: 4px;
+          font-size: 0.9rem;
+          cursor: pointer;
+          transition: background 0.2s, transform 0.1s;
+        }
+
+        .tts-control-button:hover:not(:disabled) {
+          background: #e0e0e0;
+          transform: translateY(-1px);
+        }
+
+        .tts-control-button:active:not(:disabled) {
+          transform: translateY(0);
+        }
+
+        .tts-control-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .speech-rate-display {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #667eea;
+          min-width: 35px;
+          text-align: center;
+          padding: 0.2rem 0.4rem;
+          background: #f8f9ff;
+          border-radius: 4px;
         }
       `}</style>
     </section>
