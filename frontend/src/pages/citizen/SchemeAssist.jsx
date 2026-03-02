@@ -336,6 +336,8 @@ function SchemeAssist() {
           return;
         }
 
+        const submitData = await submitResponse.json();
+
         if (!submitResponse.ok) {
           const errorMessage = submitData.error || submitData.message || 'Failed to submit application';
           throw new Error(`[${submitResponse.status}] ${errorMessage}`);
