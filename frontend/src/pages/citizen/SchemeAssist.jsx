@@ -94,6 +94,46 @@ function SchemeAssist() {
   const guidedFields = useMemo(() => (schemeData ? buildGuidedFields(schemeData) : []), [schemeData]);
   const conversationCompleted = currentStepIndex >= guidedFields.length;
 
+  // Helper functions for localStorage persistence
+  const getStorageKey = (suffix) => `scheme_assist_${schemeId}_${suffix}`;
+
+  const saveStateToLocalStorage = (stepIndex, answers, msgHistory) => {
+    try {
+      localStorage.setItem(getStorageKey('step'), JSON.stringify(stepIndex));
+      localStorage.setItem(getStorageKey('answers'), JSON.stringify(answers));
+      localStorage.setItem(getStorageKey('messages'), JSON.stringify(msgHistory));
+    } catch (err) {
+      console.error('Error saving to localStorage:', err);
+    }
+  };
+
+  const getStateFromLocalStorage = () => {
+    try {
+      const savedStep = localStorage.getItem(getStorageKey('step'));
+      const savedAnswers = localStorage.getItem(getStorageKey('answers'));
+      const savedMessages = localStorage.getItem(getStorageKey('messages'));
+
+      return {
+        step: savedStep ? JSON.parse(savedStep) : null,
+        answers: savedAnswers ? JSON.parse(savedAnswers) : null,
+        messages: savedMessages ? JSON.parse(savedMessages) : null,
+      };
+    } catch (err) {
+      console.error('Error reading from localStorage:', err);
+      return { step: null, answers: null, messages: null };
+    }
+  };
+
+  const clearStateFromLocalStorage = () => {
+    try {
+      localStorage.removeItem(getStorageKey('step'));
+      localStorage.removeItem(getStorageKey('answers'));
+      localStorage.removeItem(getStorageKey('messages'));
+    } catch (err) {
+      console.error('Error clearing localStorage:', err);
+    }
+  };
+
   // Fetch scheme data and create application on mount
   useEffect(() => {
     const initializeApplication = async () => {
@@ -109,19 +149,56 @@ function SchemeAssist() {
         const schemeInfo = await schemeResponse.json();
         setSchemeData(schemeInfo);
 
-        // Create a new application draft
-        const appResponse = await fetch(`${API_BASE_URL}/applications`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ schemeId }),
-        });
+        // Check if there's existing state in localStorage
+        const savedState = getStateFromLocalStorage();
 
-        if (!appResponse.ok) {
-          throw new Error('Failed to create application');
+        if (savedState.answers && savedState.step !== null && savedState.messages) {
+          // Restore previous session
+          setCollectedAnswers(savedState.answers);
+          setCurrentStepIndex(savedState.step);
+          setMessages(savedState.messages);
+          setChatInput('');
+
+          // Try to fetch existing applicationId from localStorage
+          const savedAppId = localStorage.getItem(getStorageKey('appId'));
+          if (savedAppId) {
+            setApplicationId(savedAppId);
+          } else {
+            // If no appId in localStorage, create new application
+            const appResponse = await fetch(`${API_BASE_URL}/applications`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ schemeId }),
+            });
+
+            if (!appResponse.ok) {
+              throw new Error('Failed to create application');
+            }
+
+            const appData = await appResponse.json();
+            const newAppId = appData.data.applicationId;
+            setApplicationId(newAppId);
+            localStorage.setItem(getStorageKey('appId'), newAppId);
+          }
+        } else {
+          // Start fresh - create a new application draft
+          const appResponse = await fetch(`${API_BASE_URL}/applications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ schemeId }),
+          });
+
+          if (!appResponse.ok) {
+            throw new Error('Failed to create application');
+          }
+
+          const appData = await appResponse.json();
+          const newAppId = appData.data.applicationId;
+          setApplicationId(newAppId);
+          localStorage.setItem(getStorageKey('appId'), newAppId);
+          setIsLoading(false);
         }
 
-        const appData = await appResponse.json();
-        setApplicationId(appData.data.applicationId);
         setIsLoading(false);
       } catch (err) {
         console.error('Initialization error:', err);
@@ -133,9 +210,16 @@ function SchemeAssist() {
     initializeApplication();
   }, [schemeId]);
 
-  // Initialize chatbot greeting when scheme data loads
+  // Initialize chatbot greeting when scheme data loads (only if no previous session)
   useEffect(() => {
     if (!schemeData || !guidedFields.length) return;
+
+    const savedState = getStateFromLocalStorage();
+
+    // Skip greeting if restoring previous session
+    if (savedState.messages && savedState.messages.length > 0) {
+      return;
+    }
 
     const firstQuestion = buildQuestion(guidedFields[0], 0, guidedFields.length);
 
@@ -223,7 +307,7 @@ function SchemeAssist() {
     }
 
     if (conversationCompleted) {
-      // Submit the application to backend
+      // Submit the application to backend with all collected answers
       try {
         const submitResponse = await fetch(
           `${API_BASE_URL}/applications/${applicationId}/submit`,
@@ -240,22 +324,31 @@ function SchemeAssist() {
 
         const submitData = await submitResponse.json();
 
-        setMessages([
+        const successMessages = [
           ...nextMessages,
           {
             role: 'bot',
             text: `✅ Application submitted successfully! Your Reference ID is: ${submitData.data.applicationId}. You can follow up on your application status later.`,
           },
-        ]);
+        ];
+
+        setMessages(successMessages);
+        
+        // Clear localStorage after successful submission
+        clearStateFromLocalStorage();
+        localStorage.removeItem(getStorageKey('appId'));
       } catch (err) {
         console.error('Submission error:', err);
-        setMessages([
+        const errorMessages = [
           ...nextMessages,
           {
             role: 'bot',
             text: `❌ Failed to submit application: ${err.message}. Your answers have been saved to the draft.`,
           },
-        ]);
+        ];
+        setMessages(errorMessages);
+        // Save state on error so user doesn't lose data
+        saveStateToLocalStorage(currentStepIndex, collectedAnswers, errorMessages);
       }
 
       setChatInput('');
@@ -266,29 +359,16 @@ function SchemeAssist() {
     const validationMessage = validateFieldInput(currentField, trimmed);
 
     if (validationMessage) {
-      setMessages([
+      const errorMessages = [
         ...nextMessages,
         { role: 'bot', text: validationMessage },
         { role: 'bot', text: buildQuestion(currentField, currentStepIndex, guidedFields.length) },
-      ]);
+      ];
+      setMessages(errorMessages);
+      // Save state even on validation error
+      saveStateToLocalStorage(currentStepIndex, collectedAnswers, errorMessages);
       setChatInput('');
       return;
-    }
-
-    // Save answer to backend
-    try {
-      await fetch(`${API_BASE_URL}/applications/${applicationId}/save-answer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fieldName: currentField.name,
-          fieldLabel: currentField.label,
-          fieldType: currentField.type,
-          answer: trimmed,
-        }),
-      });
-    } catch (err) {
-      console.error('Error saving answer:', err);
     }
 
     const updatedAnswers = {
@@ -300,34 +380,62 @@ function SchemeAssist() {
     setCollectedAnswers(updatedAnswers);
     setCurrentStepIndex(nextStepIndex);
 
+    let newMessages;
     if (nextStepIndex < guidedFields.length) {
-      setMessages([
+      newMessages = [
         ...nextMessages,
         {
           role: 'bot',
           text: buildQuestion(guidedFields[nextStepIndex], nextStepIndex, guidedFields.length),
         },
-      ]);
+      ];
     } else {
       const summaryLines = guidedFields.map(
         (field) => `• ${field.label}: ${updatedAnswers[field.name] || '-'}`,
       );
 
-      setMessages([
+      newMessages = [
         ...nextMessages,
         {
           role: 'bot',
-          text: `Great, I have collected all required inputs for ${schemeData.schemeName}.\n\nSummary:\n${summaryLines.join('\n')}\n\nClick Send to submit your application.`,
+          text: `Great, I have collected all required inputs for ${schemeData.schemeName}.\n\nSummary:\n${summaryLines.join('\n')}\n\nClick Submit Application to finalize your application.`,
         },
-      ]);
+      ];
     }
 
+    setMessages(newMessages);
+    // Save state after each successful answer (to localStorage only, not DB)
+    saveStateToLocalStorage(nextStepIndex, updatedAnswers, newMessages);
     setChatInput('');
   };
 
   const handleInputKeyDown = (event) => {
     if (event.key === 'Enter') {
       handleSend();
+    }
+  };
+
+  const handleResetForm = () => {
+    if (window.confirm('Are you sure you want to reset the form? All entered data will be lost.')) {
+      // Clear state
+      setCurrentStepIndex(0);
+      setCollectedAnswers({});
+      setChatInput('');
+      
+      // Clear localStorage
+      clearStateFromLocalStorage();
+      
+      // Reset messages to initial greeting
+      if (guidedFields.length > 0) {
+        const firstQuestion = buildQuestion(guidedFields[0], 0, guidedFields.length);
+        setMessages([
+          {
+            role: 'bot',
+            text: `Hi, I will guide you step-by-step for ${schemeData.schemeName}. Please answer each question to complete your application profile.`,
+          },
+          { role: 'bot', text: firstQuestion },
+        ]);
+      }
     }
   };
 
@@ -422,7 +530,7 @@ function SchemeAssist() {
           <input
             type="text"
             placeholder={
-              conversationCompleted ? 'Click Send to finalize submission...' : 'Type your answer for the current step...'
+              conversationCompleted ? 'Ready to submit your application' : 'Type your answer for the current step...'
             }
             className="chat-input"
             value={chatInput}
@@ -430,7 +538,15 @@ function SchemeAssist() {
             onKeyDown={handleInputKeyDown}
           />
           <button type="button" className="chat-send-button" onClick={handleSend}>
-            Send
+            {conversationCompleted ? 'Submit Application' : 'Send'}
+          </button>
+          <button 
+            type="button" 
+            className="chat-reset-button" 
+            onClick={handleResetForm}
+            title="Clear all entered data and start over"
+          >
+            Reset Form
           </button>
         </div>
       </div>

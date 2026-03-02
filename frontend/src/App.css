@@ -276,6 +276,24 @@
   cursor: pointer;
 }
 
+.chat-reset-button {
+  border: none;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #ffffff;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+
+.chat-reset-button:hover {
+  background: #b91c1c;
+}
+
+.chat-send-button:hover {
+  background: #1e40af;
+}
+
 @media (max-width: 900px) {
   .page-chat-layout {
     grid-template-columns: 1fr;
