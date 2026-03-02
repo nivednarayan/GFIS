@@ -33,6 +33,7 @@ function AppRoutes() {
 					<Route path="/citizen" element={<CitizenDashboard />} />
 					<Route path="/citizen/apply" element={<Apply />} />
 					<Route path="/citizen/apply/:schemeId" element={<SchemeAssist />} />
+					<Route path="/citizen/status" element={<Status />} />
 
 					<Route path="/officer" element={<OfficerDashboard />} />
 					<Route path="/officer/review-application" element={<ReviewApplication />} />
