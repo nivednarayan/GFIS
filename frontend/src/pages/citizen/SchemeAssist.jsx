@@ -344,8 +344,20 @@ const extractCommonFactsFromIntro = (introText) => {
   }
 
   if (!facts.address) {
-    const addressMatch = sourceText.match(/(?:address|live in|located at|my address is|from)\s+([^,]+(?:,[^,]+)?)/i);
+    const addressMatch = sourceText.match(/(?:address|live in|located at|my address is|from|at)\s+([^,]+(?:,[^,]+)?)/i);
     if (addressMatch) facts.address = addressMatch[1].trim();
+  }
+
+  // Context-based family member detection: "my family has X people" or "X family members"
+  if (!facts.familyMembers) {
+    const familyMatch = sourceText.match(/(?:my family|family of)\s+(?:has|have|is|are|with)\s+(\d+)\s+(?:people|members|persons)/i);
+    if (familyMatch) facts.familyMembers = familyMatch[1];
+  }
+
+  // Ration card: "ration card number is ABC123" or similar
+  if (!facts.rationCard) {
+    const rationMatch = sourceText.match(/(?:ration\s+card\s+(?:number|no)?\s*[:=]?\s*)([A-Z0-9]+)/i);
+    if (rationMatch) facts.rationCard = rationMatch[1];
   }
 
   return facts;
@@ -353,6 +365,8 @@ const extractCommonFactsFromIntro = (introText) => {
 
 const getFactValueForField = (field, facts) => {
   const fieldType = getFieldCanonicalType(field);
+  const fieldNameLower = (field.name || '').toLowerCase();
+  const fieldLabelLower = (field.label || '').toLowerCase();
 
   if (fieldType === 'name') return facts.name || '';
   if (fieldType === 'aadhaar') return facts.aadhaar || '';
@@ -363,14 +377,85 @@ const getFactValueForField = (field, facts) => {
   if (fieldType === 'landOwnership') return facts.landOwnership || '';
   if (fieldType === 'address') return facts.address || '';
 
+  // Fallback: check by field name for extracted facts
+  if (facts.familyMembers && (fieldNameLower.includes('family') || fieldNameLower.includes('member'))) {
+    return facts.familyMembers;
+  }
+  if (facts.rationCard && (fieldNameLower.includes('ration') || fieldNameLower.includes('card'))) {
+    return facts.rationCard;
+  }
+
   return '';
 };
 
 const extractAnswersFromIntro = (requiredFields, introText) => {
   const facts = extractCommonFactsFromIntro(introText);
+  const sourceText = introText.trim();
 
   return requiredFields.reduce((answers, field) => {
-    const extractedValue = getFactValueForField(field, facts) || extractFieldValueFromIntro(field, introText);
+    // Strategy 1: Try to get from common facts (extracted earlier)
+    let extractedValue = getFactValueForField(field, facts);
+    
+    // Strategy 2: Try field-specific extraction
+    if (!extractedValue) {
+      extractedValue = extractFieldValueFromIntro(field, sourceText);
+    }
+
+    // Strategy 3: For numeric fields, look for context-aware numbers
+    if (!extractedValue && (field.type === 'number' || field.type === 'text')) {
+      const fieldNameLower = (field.name || '').toLowerCase();
+      const fieldLabelLower = (field.label || '').toLowerCase();
+      const isFamilyCountField =
+        fieldNameLower.includes('members') ||
+        fieldNameLower.includes('family') ||
+        fieldLabelLower.includes('members') ||
+        fieldLabelLower.includes('family');
+      const isRationCardField =
+        fieldNameLower.includes('ration') ||
+        fieldLabelLower.includes('ration') ||
+        (fieldNameLower.includes('card') && fieldLabelLower.includes('number'));
+
+      // Is this a "count" or "number" field?
+      if (
+        !isRationCardField &&
+        (isFamilyCountField ||
+          fieldNameLower.includes('count') ||
+          fieldLabelLower.includes('count'))
+      ) {
+        // Try context-aware patterns first
+        let numberMatch = null;
+        
+        if (fieldNameLower.includes('family') || fieldNameLower.includes('member')) {
+          // Look for "X people", "X members", "X family"
+          numberMatch = sourceText.match(/\b(\d+)\s+(?:people|members|person|member|persons|family|families)/i);
+        }
+        
+        if (!numberMatch) {
+          // Fallback: just get first number
+          numberMatch = sourceText.match(/\b(\d+)\b/);
+        }
+        
+        if (numberMatch) {
+          const num = numberMatch[1];
+          // Quick validation for reasonable range
+          if (parseInt(num) > 0 && parseInt(num) < 999) {
+            extractedValue = num;
+          }
+        }
+      }
+    }
+
+    // Strategy 4: For text fields with options, try to find any matching option in text
+    if (!extractedValue && field.options && field.options.length > 0) {
+      const textLower = sourceText.toLowerCase();
+      const foundOption = field.options.find(
+        (opt) => textLower.includes(opt.toLowerCase()),
+      );
+      if (foundOption) {
+        extractedValue = foundOption;
+      }
+    }
+
     if (!extractedValue) return answers;
 
     const validationError = validateFieldInput(field, extractedValue);
@@ -381,6 +466,33 @@ const extractAnswersFromIntro = (requiredFields, introText) => {
       [field.name]: extractedValue,
     };
   }, {});
+};
+
+const extractAnswersFromIntroAPI = async (requiredFields, introText) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/input/extract-intro`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        introText,
+        requiredFields,
+      }),
+    });
+
+    if (!response.ok) {
+      return extractAnswersFromIntro(requiredFields, introText);
+    }
+
+    const payload = await response.json();
+    const extracted = payload?.data?.extracted;
+    if (!extracted || typeof extracted !== 'object') {
+      return extractAnswersFromIntro(requiredFields, introText);
+    }
+
+    return extracted;
+  } catch (error) {
+    return extractAnswersFromIntro(requiredFields, introText);
+  }
 };
 
 function SchemeAssist() {
@@ -911,7 +1023,7 @@ function SchemeAssist() {
     }
 
     if (!hasCapturedIntro) {
-      const extractedAnswers = extractAnswersFromIntro(requiredGuidedFields, trimmed);
+      const extractedAnswers = await extractAnswersFromIntroAPI(requiredGuidedFields, trimmed);
       const updatedAnswers = {
         ...collectedAnswers,
         ...extractedAnswers,

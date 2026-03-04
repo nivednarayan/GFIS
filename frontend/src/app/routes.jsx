@@ -6,8 +6,7 @@ import CitizenDashboard from '../pages/citizen/Dashboard';
 import Apply from '../pages/citizen/Apply';
 import Status from '../pages/citizen/Status';
 import SchemeAssist from '../pages/citizen/SchemeAssist';
-import OfficerDashboard from '../pages/officer/Dashboard';
-import ReviewApplication from '../pages/officer/ReviewApplication';
+
 import Analytics from '../pages/admin/Analytics';
 import DistrictHeatmap from '../pages/admin/DistrictHeatmap';
 
@@ -20,7 +19,7 @@ function AppRoutes() {
 					<NavLink to="/">Landing</NavLink>
 					<NavLink to="/login">Login</NavLink>
 					<NavLink to="/citizen">Citizen</NavLink>
-					<NavLink to="/officer">Officer</NavLink>
+
 					<NavLink to="/admin">Admin</NavLink>
 				</nav>
 			</header>
@@ -35,8 +34,6 @@ function AppRoutes() {
 					<Route path="/citizen/apply/:schemeId" element={<SchemeAssist />} />
 					<Route path="/citizen/status" element={<Status />} />
 
-					<Route path="/officer" element={<OfficerDashboard />} />
-					<Route path="/officer/review-application" element={<ReviewApplication />} />
 
 					<Route path="/admin" element={<Analytics />} />
 					<Route path="/admin/district-heatmap" element={<DistrictHeatmap />} />

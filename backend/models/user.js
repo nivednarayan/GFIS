@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema(
     },
     userType: {
       type: String,
-      enum: ["citizen", "officer", "admin"],
+      enum: ["citizen", "admin"],
       default: "citizen",
     },
     address: {

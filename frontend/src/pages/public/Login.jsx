@@ -8,7 +8,6 @@ function Login() {
       <p>Select your role to proceed</p>
       <div className="page-links">
         <Link to="/citizen">Login as Citizen</Link>
-        <Link to="/officer">Login as Officer</Link>
       </div>
       <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '1rem' }}>
         Admin access is assigned by the backend based on your role and JWT token
