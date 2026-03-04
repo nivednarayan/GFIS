@@ -77,6 +77,312 @@ const validateFieldInput = (field, value) => {
   return null;
 };
 
+const cleanExtractedValue = (value) => value.replace(/^[\s:,-]+|[\s:,-]+$/g, '').trim();
+
+const normalizeToken = (value = '') =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const FIELD_ALIASES = {
+  name: ['name', 'full name', 'applicant name'],
+  aadhaar: ['aadhaar', 'aadhar', 'aadhaar number', 'aadhar number', 'uid'],
+  mobile: ['mobile', 'mobile number', 'phone', 'phone number', 'contact number'],
+  email: ['email', 'email id', 'mail'],
+  dateofbirth: ['dob', 'date of birth', 'birth date'],
+  income: ['income', 'annual income', 'annual agricultural income', 'salary', 'yearly income'],
+  address: ['address', 'residence', 'home address'],
+};
+
+const inferAliasKeys = (field) => {
+  const nameToken = normalizeToken(field.name || '');
+  const labelToken = normalizeToken(field.label || '');
+
+  return Object.keys(FIELD_ALIASES).filter(
+    (key) => nameToken.includes(key) || labelToken.includes(key),
+  );
+};
+
+const parseIntroKeyValuePairs = (introText) => {
+  const pairs = [];
+  
+  // Split by commas or newlines to get individual statements
+  const segments = introText
+    .split(/,|\n|;/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  segments.forEach((segment) => {
+    // Try direct match: "key: value" or "key = value"
+    let directMatch = segment.match(/^([^:=-]{2,40})\s*[:=-]\s*(.+)$/);
+    if (directMatch) {
+      pairs.push({
+        key: normalizeToken(directMatch[1]),
+        value: cleanExtractedValue(directMatch[2]),
+      });
+      return;
+    }
+
+    // Try natural language: "key is value"
+    let naturalMatch = segment.match(/^([a-z\s]+?)\s+is\s+(.+)$/i);
+    if (naturalMatch) {
+      const potentialKey = normalizeToken(naturalMatch[1]);
+      if (potentialKey.length > 1) {
+        pairs.push({
+          key: potentialKey,
+          value: cleanExtractedValue(naturalMatch[2]),
+        });
+        return;
+      }
+    }
+  });
+
+  return pairs;
+};
+
+const getValueFromKeyValuePairs = (field, parsedPairs) => {
+  if (!parsedPairs.length) return '';
+
+  const directTokens = [normalizeToken(field.label), normalizeToken(field.name)].filter(Boolean);
+  const aliasKeys = inferAliasKeys(field);
+  const aliasTokens = aliasKeys.flatMap((aliasKey) => FIELD_ALIASES[aliasKey] || []);
+  const supportedTokens = [...directTokens, ...aliasTokens.map(normalizeToken)];
+
+  const match = parsedPairs.find((pair) => supportedTokens.includes(pair.key));
+  return match?.value || '';
+};
+
+const findValueByLabeledPattern = (sourceText, tokens) => {
+  const escapedTokens = tokens
+    .filter(Boolean)
+    .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+  if (!escapedTokens.length) return '';
+
+  const pattern = new RegExp(
+    `(?:${escapedTokens.join('|')})\\s*(?:is|:|=|-)?\\s*([^\\n,.]+)`,
+    'i',
+  );
+  const match = sourceText.match(pattern);
+  return match ? cleanExtractedValue(match[1]) : '';
+};
+
+const extractFieldValueFromIntro = (field, introText) => {
+  const sourceText = introText.trim();
+  if (!sourceText) return '';
+
+  const parsedPairs = parseIntroKeyValuePairs(sourceText);
+  const pairValue = getValueFromKeyValuePairs(field, parsedPairs);
+  if (pairValue) return pairValue;
+
+  const fieldName = (field.name || '').toLowerCase();
+  const fieldLabel = (field.label || '').toLowerCase();
+
+  if (fieldName.includes('email') || fieldLabel.includes('email')) {
+    const match = sourceText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    return match ? match[0] : '';
+  }
+
+  if (fieldName.includes('aadhaar') || fieldLabel.includes('aadhaar')) {
+    const match = sourceText.match(/\b\d{12}\b/);
+    return match ? match[0] : '';
+  }
+
+  if (fieldName.includes('mobile') || fieldLabel.includes('mobile') || fieldName.includes('phone')) {
+    const match = sourceText.match(/\b\d{10}\b/);
+    return match ? match[0] : '';
+  }
+
+  if (fieldName.includes('dateofbirth') || fieldName.includes('dob') || fieldLabel.includes('date of birth')) {
+    const match = sourceText.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b/);
+    return match ? match[0] : '';
+  }
+
+  if (field.options?.length) {
+    const normalizedText = sourceText.toLowerCase();
+    const selectedOption = field.options.find((option) =>
+      normalizedText.includes(option.toLowerCase()),
+    );
+    if (selectedOption) return selectedOption;
+  }
+
+  if (fieldName.includes('name') || fieldLabel.includes('name')) {
+    const labeledName = findValueByLabeledPattern(sourceText, [
+      'name',
+      'full name',
+      'applicant name',
+      field.label,
+      field.name,
+    ]);
+    if (labeledName) return labeledName;
+
+    const introPattern = sourceText.match(/(?:my name is|i am|i'm)\s+([a-z][a-z\s'.-]{1,60})/i);
+    if (introPattern) return cleanExtractedValue(introPattern[1]);
+  }
+
+  if (fieldName.includes('income') || fieldLabel.includes('income')) {
+    const incomeMatch = sourceText.match(
+      /(?:income|salary|annual income|annual agricultural income)[^\d]{0,20}(\d[\d,]*)/i,
+    );
+    if (incomeMatch) return incomeMatch[1].replace(/,/g, '');
+  }
+
+  if (
+    fieldName.includes('land') ||
+    fieldLabel.includes('land') ||
+    fieldName.includes('cultivable') ||
+    fieldLabel.includes('cultivable')
+  ) {
+    if (/\b(yes|y|true|haan|ha)\b/i.test(sourceText)) return 'Yes';
+    if (/\b(no|n|false|nahi|nah)\b/i.test(sourceText)) return 'No';
+  }
+
+  if (fieldName.includes('address') || fieldLabel.includes('address')) {
+    return findValueByLabeledPattern(sourceText, ['address', field.label, field.name]);
+  }
+
+  return findValueByLabeledPattern(sourceText, [field.label, field.name]);
+};
+
+const getFieldCanonicalType = (field) => {
+  const nameToken = normalizeToken(field.name || '');
+  const labelToken = normalizeToken(field.label || '');
+
+  if (nameToken.includes('name') || labelToken.includes('name')) return 'name';
+  if (nameToken.includes('aadhaar') || nameToken.includes('aadhar') || labelToken.includes('aadhaar') || labelToken.includes('aadhar')) return 'aadhaar';
+  if (nameToken.includes('mobile') || nameToken.includes('phone') || labelToken.includes('mobile') || labelToken.includes('phone')) return 'mobile';
+  if (nameToken.includes('email') || labelToken.includes('email')) return 'email';
+  if (nameToken.includes('dateofbirth') || nameToken.includes('dob') || labelToken.includes('date of birth') || labelToken.includes('dob')) return 'dateOfBirth';
+  if (nameToken.includes('income') || labelToken.includes('income')) return 'income';
+  if (nameToken.includes('land') || labelToken.includes('land') || nameToken.includes('cultivable') || labelToken.includes('cultivable')) return 'landOwnership';
+  if (nameToken.includes('address') || labelToken.includes('address')) return 'address';
+
+  return '';
+};
+
+const extractCommonFactsFromIntro = (introText) => {
+  const sourceText = introText.trim();
+  const facts = {};
+
+  if (!sourceText) return facts;
+
+  const parsedPairs = parseIntroKeyValuePairs(sourceText);
+  parsedPairs.forEach((pair) => {
+    const key = normalizeToken(pair.key);
+    if (!key || !pair.value) return;
+
+    if (FIELD_ALIASES.name.some((alias) => key.includes(normalizeToken(alias)))) {
+      facts.name = pair.value;
+    }
+
+    if (FIELD_ALIASES.aadhaar.some((alias) => key.includes(normalizeToken(alias)))) {
+      const digits = pair.value.replace(/\D/g, '');
+      if (digits) facts.aadhaar = digits.slice(0, 12);
+    }
+
+    if (FIELD_ALIASES.mobile.some((alias) => key.includes(normalizeToken(alias)))) {
+      const digits = pair.value.replace(/\D/g, '');
+      if (digits) facts.mobile = digits.slice(-10);
+    }
+
+    if (FIELD_ALIASES.email.some((alias) => key.includes(normalizeToken(alias)))) {
+      facts.email = pair.value;
+    }
+
+    if (FIELD_ALIASES.dateofbirth.some((alias) => key.includes(normalizeToken(alias)))) {
+      facts.dateOfBirth = pair.value;
+    }
+
+    if (FIELD_ALIASES.income.some((alias) => key.includes(normalizeToken(alias)))) {
+      const amount = pair.value.replace(/[^\d.]/g, '');
+      if (amount) facts.income = amount;
+    }
+
+    if (FIELD_ALIASES.address.some((alias) => key.includes(normalizeToken(alias)))) {
+      facts.address = pair.value;
+    }
+  });
+
+  const nameSentenceMatch = sourceText.match(
+    /(?:my name is|i am|i'm|this is)\s+([a-z][a-z\s'.-]{1,80}?)(?=\s+(?:and|my|i|mobile|aadhaar|aadhar|income|land|address|dob|date of birth)\b|[,.]|$)/i,
+  );
+  if (nameSentenceMatch?.[1]) {
+    facts.name = cleanExtractedValue(nameSentenceMatch[1]);
+  }
+
+  const emailMatch = sourceText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  if (emailMatch) facts.email = emailMatch[0];
+
+  if (!facts.aadhaar) {
+    const aadhaarMatch = sourceText.match(/(\d{4}\s?\d{4}\s?\d{4}|\d{12})/);
+    if (aadhaarMatch) {
+      const cleaned = aadhaarMatch[1].replace(/\s/g, '');
+      if (cleaned.length === 12) facts.aadhaar = cleaned;
+    }
+  }
+
+  if (!facts.mobile) {
+    const mobileMatch = sourceText.match(/(?:\+91[\s-]?)?\b([6-9]\d{9})\b/);
+    if (mobileMatch && mobileMatch[1].length === 10) facts.mobile = mobileMatch[1];
+  }
+
+  if (!facts.dateOfBirth) {
+    const dobMatch = sourceText.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b/);
+    if (dobMatch) facts.dateOfBirth = dobMatch[1];
+  }
+
+  if (!facts.income) {
+    const incomeMatch = sourceText.match(/(?:income|salary|annual income|annual agricultural income)[^\d]{0,20}(\d[\d,]*)/i);
+    if (incomeMatch) facts.income = incomeMatch[1].replace(/,/g, '');
+  }
+
+  if (!facts.landOwnership) {
+    if (/\b(yes|y|true|haan|ha)\b/i.test(sourceText)) facts.landOwnership = 'Yes';
+    else if (/\b(no|n|false|nahi|nah)\b/i.test(sourceText)) facts.landOwnership = 'No';
+  }
+
+  if (!facts.address) {
+    const addressMatch = sourceText.match(/(?:address|live in|located at|my address is|from)\s+([^,]+(?:,[^,]+)?)/i);
+    if (addressMatch) facts.address = addressMatch[1].trim();
+  }
+
+  return facts;
+};
+
+const getFactValueForField = (field, facts) => {
+  const fieldType = getFieldCanonicalType(field);
+
+  if (fieldType === 'name') return facts.name || '';
+  if (fieldType === 'aadhaar') return facts.aadhaar || '';
+  if (fieldType === 'mobile') return facts.mobile || '';
+  if (fieldType === 'email') return facts.email || '';
+  if (fieldType === 'dateOfBirth') return facts.dateOfBirth || '';
+  if (fieldType === 'income') return facts.income || '';
+  if (fieldType === 'landOwnership') return facts.landOwnership || '';
+  if (fieldType === 'address') return facts.address || '';
+
+  return '';
+};
+
+const extractAnswersFromIntro = (requiredFields, introText) => {
+  const facts = extractCommonFactsFromIntro(introText);
+
+  return requiredFields.reduce((answers, field) => {
+    const extractedValue = getFactValueForField(field, facts) || extractFieldValueFromIntro(field, introText);
+    if (!extractedValue) return answers;
+
+    const validationError = validateFieldInput(field, extractedValue);
+    if (validationError) return answers;
+
+    return {
+      ...answers,
+      [field.name]: extractedValue,
+    };
+  }, {});
+};
+
 function SchemeAssist() {
   const { schemeId } = useParams();
   const recognitionRef = useRef(null);
@@ -94,6 +400,7 @@ function SchemeAssist() {
   const [messages, setMessages] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [collectedAnswers, setCollectedAnswers] = useState({});
+  const [hasCapturedIntro, setHasCapturedIntro] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
   const [textToSpeechEnabled, setTextToSpeechEnabled] = useState(true);
@@ -101,7 +408,23 @@ function SchemeAssist() {
   const [lastBotMessage, setLastBotMessage] = useState('');
   const [isSpeechPaused, setIsSpeechPaused] = useState(false);
   const guidedFields = useMemo(() => (schemeData ? buildGuidedFields(schemeData) : []), [schemeData]);
-  const conversationCompleted = currentStepIndex >= guidedFields.length;
+  const requiredGuidedFields = useMemo(
+    () => guidedFields.filter((field) => field.required),
+    [guidedFields],
+  );
+  const conversationCompleted = currentStepIndex >= requiredGuidedFields.length;
+
+  const findNextMissingRequiredStep = useCallback(
+    (answers) => {
+      const nextMissingIndex = requiredGuidedFields.findIndex((field) => {
+        const value = answers[field.name];
+        return typeof value !== 'string' || !value.trim();
+      });
+
+      return nextMissingIndex === -1 ? requiredGuidedFields.length : nextMissingIndex;
+    },
+    [requiredGuidedFields],
+  );
 
   // Helper functions for localStorage persistence
   const getStorageKey = (suffix) => `scheme_assist_${schemeId}_${suffix}`;
@@ -308,6 +631,7 @@ function SchemeAssist() {
           // Restore submitted state
           setApplicationId(submittedState.appId);
           setHasSubmitted(true);
+          setHasCapturedIntro(true);
           setSubmittedData(submittedState.data);
           
           // Restore the original chat messages if available
@@ -352,6 +676,7 @@ function SchemeAssist() {
           // Restore previous session
           setCollectedAnswers(savedState.answers);
           setCurrentStepIndex(savedState.step);
+          setHasCapturedIntro(true);
           setMessages(savedState.messages);
           setChatInput('');
           // Do NOT restore applicationId - it will be created on submission
@@ -375,7 +700,7 @@ function SchemeAssist() {
 
   // Initialize chatbot greeting when scheme data loads (only if no previous session)
   useEffect(() => {
-    if (!schemeData || !guidedFields.length) return;
+    if (!schemeData || !requiredGuidedFields.length) return;
 
     const savedState = getStateFromLocalStorage();
     const submittedState = getSubmittedState();
@@ -390,25 +715,23 @@ function SchemeAssist() {
       return;
     }
 
-    const firstQuestion = buildQuestion(guidedFields[0], 0, guidedFields.length);
-
     const greetingMessages = [
       {
         role: 'bot',
-        text: `Hi, I will guide you step-by-step for ${schemeData.schemeName}. Please answer each question to complete your application profile.`,
+        text: `Hi, I will help you complete your ${schemeData.schemeName} application. Please introduce yourself in one message and include as many required details as you can.`,
       },
-      { role: 'bot', text: firstQuestion },
     ];
 
     setMessages(greetingMessages);
     setChatInput('');
     setCurrentStepIndex(0);
     setCollectedAnswers({});
+    setHasCapturedIntro(false);
 
     
     // Reset spoken messages index for new conversation
     spokenMessagesIndexRef.current = -1;
-  }, [schemeData, guidedFields]);
+  }, [schemeData, requiredGuidedFields]);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -581,20 +904,80 @@ function SchemeAssist() {
 
     const nextMessages = [...messages, { role: 'user', text: trimmed }];
 
-    if (!guidedFields.length) {
+    if (!requiredGuidedFields.length) {
       setMessages(nextMessages);
       setChatInput('');
       return;
     }
 
-    const currentField = guidedFields[currentStepIndex];
+    if (!hasCapturedIntro) {
+      const extractedAnswers = extractAnswersFromIntro(requiredGuidedFields, trimmed);
+      const updatedAnswers = {
+        ...collectedAnswers,
+        ...extractedAnswers,
+      };
+      const nextStepIndex = findNextMissingRequiredStep(updatedAnswers);
+
+      setCollectedAnswers(updatedAnswers);
+      setCurrentStepIndex(nextStepIndex);
+      setHasCapturedIntro(true);
+
+      const capturedFieldsText = Object.keys(extractedAnswers).length
+        ? requiredGuidedFields
+            .filter((field) => extractedAnswers[field.name])
+            .map((field) => `• ${field.label}: ${extractedAnswers[field.name]}`)
+            .join('\n')
+        : '';
+
+      if (nextStepIndex < requiredGuidedFields.length) {
+        const nextQuestion = buildQuestion(
+          requiredGuidedFields[nextStepIndex],
+          nextStepIndex,
+          requiredGuidedFields.length,
+        );
+        const introResponse = capturedFieldsText
+          ? `Thanks! I captured these details from your introduction:\n${capturedFieldsText}\n\nNow I only need the missing required details.`
+          : 'Thanks for the introduction. I could not capture required fields yet, so I will ask only the missing required details now.';
+
+        const introMessages = [
+          ...nextMessages,
+          { role: 'bot', text: introResponse },
+          { role: 'bot', text: nextQuestion },
+        ];
+
+        setMessages(introMessages);
+        saveStateToLocalStorage(nextStepIndex, updatedAnswers, introMessages);
+        setChatInput('');
+        return;
+      }
+
+      const summaryLines = requiredGuidedFields.map(
+        (field) => `• ${field.label}: ${updatedAnswers[field.name] || '-'}`,
+      );
+
+      const summaryText = `Great, I have collected all required inputs for ${schemeData.schemeName} from your introduction.\n\nSummary:\n${summaryLines.join('\n')}\n\nClick Submit Application to finalize your application.`;
+      const introCompleteMessages = [
+        ...nextMessages,
+        { role: 'bot', text: summaryText },
+      ];
+
+      setMessages(introCompleteMessages);
+      saveStateToLocalStorage(nextStepIndex, updatedAnswers, introCompleteMessages);
+      setChatInput('');
+      return;
+    }
+
+    const currentField = requiredGuidedFields[currentStepIndex];
     const validationMessage = validateFieldInput(currentField, trimmed);
 
     if (validationMessage) {
       const errorMessages = [
         ...nextMessages,
         { role: 'bot', text: validationMessage },
-        { role: 'bot', text: buildQuestion(currentField, currentStepIndex, guidedFields.length) },
+        {
+          role: 'bot',
+          text: buildQuestion(currentField, currentStepIndex, requiredGuidedFields.length),
+        },
       ];
       setMessages(errorMessages);
       // Save state even on validation error
@@ -609,15 +992,18 @@ function SchemeAssist() {
       [currentField.name]: trimmed,
     };
 
-    const nextStepIndex = currentStepIndex + 1;
+    const nextStepIndex = findNextMissingRequiredStep(updatedAnswers);
     setCollectedAnswers(updatedAnswers);
     setCurrentStepIndex(nextStepIndex);
 
     let newMessages;
-    let botMessageToSpeak = '';
     
-    if (nextStepIndex < guidedFields.length) {
-      const nextQuestion = buildQuestion(guidedFields[nextStepIndex], nextStepIndex, guidedFields.length);
+    if (nextStepIndex < requiredGuidedFields.length) {
+      const nextQuestion = buildQuestion(
+        requiredGuidedFields[nextStepIndex],
+        nextStepIndex,
+        requiredGuidedFields.length,
+      );
       newMessages = [
         ...nextMessages,
         {
@@ -625,9 +1011,8 @@ function SchemeAssist() {
           text: nextQuestion,
         },
       ];
-      botMessageToSpeak = nextQuestion;
     } else {
-      const summaryLines = guidedFields.map(
+      const summaryLines = requiredGuidedFields.map(
         (field) => `• ${field.label}: ${updatedAnswers[field.name] || '-'}`,
       );
 
@@ -639,7 +1024,6 @@ function SchemeAssist() {
           text: summaryText,
         },
       ];
-      botMessageToSpeak = summaryText;
     }
 
     setMessages(newMessages);
@@ -677,16 +1061,16 @@ function SchemeAssist() {
         // This prevents unwanted entries in the database for abandoned forms
 
         // Reset messages to initial greeting
-        if (guidedFields.length > 0) {
-          const firstQuestion = buildQuestion(guidedFields[0], 0, guidedFields.length);
+        if (requiredGuidedFields.length > 0) {
           setMessages([
             {
               role: 'bot',
-              text: `Hi, I will guide you step-by-step for ${schemeData.schemeName}. Please answer each question to complete your application profile.`,
+              text: `Hi, I will help you complete your ${schemeData.schemeName} application. Please introduce yourself in one message and include as many required details as you can.`,
             },
-            { role: 'bot', text: firstQuestion },
           ]);
         }
+
+        setHasCapturedIntro(false);
       };
 
       resetFormState();
