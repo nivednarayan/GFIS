@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -44,9 +45,9 @@ const buildGuidedFields = (schemeData) => {
   }));
 };
 
-const buildQuestion = (field, index, total) => {
+const buildQuestion = (field, stepNumber, totalSteps) => {
   const optionsText = field.options?.length ? ` Options: ${field.options.join(' / ')}` : '';
-  return `Step ${index + 1}/${total} (${field.section})\n${field.label}${optionsText}`;
+  return `Step ${stepNumber}/${totalSteps} (${field.section})\n${field.label}${optionsText}`;
 };
 
 const validateFieldInput = (field, value) => {
@@ -260,6 +261,16 @@ const getFieldCanonicalType = (field) => {
   if (nameToken.includes('address') || labelToken.includes('address')) return 'address';
 
   return '';
+};
+
+const isAadhaarField = (field) => getFieldCanonicalType(field) === 'aadhaar';
+
+const getLoggedInAadhaar = (user) => {
+  if (!user) return '';
+
+  const rawAadhaar = user.aadhaar || user.aadhaarNumber || user.aadhar || user.aadharNumber || '';
+  const digitsOnly = String(rawAadhaar).replace(/\D/g, '');
+  return digitsOnly.length === 12 ? digitsOnly : '';
 };
 
 const extractCommonFactsFromIntro = (introText) => {
@@ -497,6 +508,7 @@ const extractAnswersFromIntroAPI = async (requiredFields, introText) => {
 
 function SchemeAssist() {
   const { schemeId } = useParams();
+  const { user } = useAuth();
   const recognitionRef = useRef(null);
   const initializationRef = useRef(false); // Prevent React.StrictMode double initialization
   const speedChangeTimeoutRef = useRef(null); // Debounce speed changes
@@ -524,6 +536,29 @@ function SchemeAssist() {
     () => guidedFields.filter((field) => field.required),
     [guidedFields],
   );
+  const loggedInAadhaar = useMemo(() => getLoggedInAadhaar(user), [user]);
+
+  const enforceLoggedInAadhaar = useCallback(
+    (answers = {}) => {
+      if (!loggedInAadhaar || !requiredGuidedFields.length) return answers;
+
+      let changed = false;
+      const mergedAnswers = { ...answers };
+
+      requiredGuidedFields.forEach((field) => {
+        if (!isAadhaarField(field)) return;
+
+        if (mergedAnswers[field.name] !== loggedInAadhaar) {
+          mergedAnswers[field.name] = loggedInAadhaar;
+          changed = true;
+        }
+      });
+
+      return changed ? mergedAnswers : answers;
+    },
+    [loggedInAadhaar, requiredGuidedFields],
+  );
+
   const conversationCompleted = currentStepIndex >= requiredGuidedFields.length;
 
   const findNextMissingRequiredStep = useCallback(
@@ -534,6 +569,36 @@ function SchemeAssist() {
       });
 
       return nextMissingIndex === -1 ? requiredGuidedFields.length : nextMissingIndex;
+    },
+    [requiredGuidedFields],
+  );
+
+  useEffect(() => {
+    const normalizedAnswers = enforceLoggedInAadhaar(collectedAnswers);
+    if (normalizedAnswers !== collectedAnswers) {
+      setCollectedAnswers(normalizedAnswers);
+      const nextStepIndex = findNextMissingRequiredStep(normalizedAnswers);
+      setCurrentStepIndex(nextStepIndex);
+    }
+  }, [collectedAnswers, enforceLoggedInAadhaar, findNextMissingRequiredStep]);
+
+  const getQuestionProgress = useCallback(
+    (fieldIndex, answers) => {
+      const answeredRequiredCount = requiredGuidedFields.reduce((count, field) => {
+        const value = answers[field.name];
+        return typeof value === 'string' && value.trim() ? count + 1 : count;
+      }, 0);
+
+      const currentFieldValue = requiredGuidedFields[fieldIndex]
+        ? answers[requiredGuidedFields[fieldIndex].name]
+        : '';
+      const isCurrentFieldAlreadyAnswered =
+        typeof currentFieldValue === 'string' && currentFieldValue.trim();
+
+      return {
+        stepNumber: isCurrentFieldAlreadyAnswered ? answeredRequiredCount : answeredRequiredCount + 1,
+        totalSteps: requiredGuidedFields.length || 1,
+      };
     },
     [requiredGuidedFields],
   );
@@ -786,8 +851,9 @@ function SchemeAssist() {
 
         if (savedState.answers && savedState.step !== null && savedState.messages) {
           // Restore previous session
-          setCollectedAnswers(savedState.answers);
-          setCurrentStepIndex(savedState.step);
+          const normalizedSavedAnswers = enforceLoggedInAadhaar(savedState.answers || {});
+          setCollectedAnswers(normalizedSavedAnswers);
+          setCurrentStepIndex(findNextMissingRequiredStep(normalizedSavedAnswers));
           setHasCapturedIntro(true);
           setMessages(savedState.messages);
           setChatInput('');
@@ -1024,10 +1090,10 @@ function SchemeAssist() {
 
     if (!hasCapturedIntro) {
       const extractedAnswers = await extractAnswersFromIntroAPI(requiredGuidedFields, trimmed);
-      const updatedAnswers = {
+      const updatedAnswers = enforceLoggedInAadhaar({
         ...collectedAnswers,
         ...extractedAnswers,
-      };
+      });
       const nextStepIndex = findNextMissingRequiredStep(updatedAnswers);
 
       setCollectedAnswers(updatedAnswers);
@@ -1037,15 +1103,16 @@ function SchemeAssist() {
       const capturedFieldsText = Object.keys(extractedAnswers).length
         ? requiredGuidedFields
             .filter((field) => extractedAnswers[field.name])
-            .map((field) => `• ${field.label}: ${extractedAnswers[field.name]}`)
+            .map((field) => `• ${field.label}: ${updatedAnswers[field.name]}`)
             .join('\n')
         : '';
 
       if (nextStepIndex < requiredGuidedFields.length) {
+        const { stepNumber, totalSteps } = getQuestionProgress(nextStepIndex, updatedAnswers);
         const nextQuestion = buildQuestion(
           requiredGuidedFields[nextStepIndex],
-          nextStepIndex,
-          requiredGuidedFields.length,
+          stepNumber,
+          totalSteps,
         );
         const introResponse = capturedFieldsText
           ? `Thanks! I captured these details from your introduction:\n${capturedFieldsText}\n\nNow I only need the missing required details.`
@@ -1083,12 +1150,13 @@ function SchemeAssist() {
     const validationMessage = validateFieldInput(currentField, trimmed);
 
     if (validationMessage) {
+      const { stepNumber, totalSteps } = getQuestionProgress(currentStepIndex, collectedAnswers);
       const errorMessages = [
         ...nextMessages,
         { role: 'bot', text: validationMessage },
         {
           role: 'bot',
-          text: buildQuestion(currentField, currentStepIndex, requiredGuidedFields.length),
+          text: buildQuestion(currentField, stepNumber, totalSteps),
         },
       ];
       setMessages(errorMessages);
@@ -1099,10 +1167,10 @@ function SchemeAssist() {
       return;
     }
 
-    const updatedAnswers = {
+    const updatedAnswers = enforceLoggedInAadhaar({
       ...collectedAnswers,
       [currentField.name]: trimmed,
-    };
+    });
 
     const nextStepIndex = findNextMissingRequiredStep(updatedAnswers);
     setCollectedAnswers(updatedAnswers);
@@ -1111,10 +1179,11 @@ function SchemeAssist() {
     let newMessages;
     
     if (nextStepIndex < requiredGuidedFields.length) {
+      const { stepNumber, totalSteps } = getQuestionProgress(nextStepIndex, updatedAnswers);
       const nextQuestion = buildQuestion(
         requiredGuidedFields[nextStepIndex],
-        nextStepIndex,
-        requiredGuidedFields.length,
+        stepNumber,
+        totalSteps,
       );
       newMessages = [
         ...nextMessages,
@@ -1160,7 +1229,7 @@ function SchemeAssist() {
       const resetFormState = () => {
         // Clear all state
         setCurrentStepIndex(0);
-        setCollectedAnswers({});
+        setCollectedAnswers(enforceLoggedInAadhaar({}));
         setChatInput('');
         setHasSubmitted(false);
         setSubmittedData(null);
