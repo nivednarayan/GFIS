@@ -5,57 +5,79 @@ import './Dashboard.css';
 function Dashboard() {
   return (
     <section className="dashboard-page">
-      <div className="dashboard-header">
+      <header className="dashboard-hero">
+        <p className="hero-badge">Citizen Services Portal</p>
         <h2>Citizen Dashboard</h2>
-        <p>Welcome to GFIS - Your Gateway to Government Schemes</p>
-      </div>
+        <p className="hero-subtitle">
+          Welcome to GFIS. Access welfare schemes, track applications, and receive guidance
+          through one trusted government platform.
+        </p>
 
-      <div className="dashboard-cards">
+        <div className="hero-metrics" aria-label="Dashboard highlights">
+          <div className="metric-item">
+            <strong>24x7</strong>
+            <span>Digital Access</span>
+          </div>
+          <div className="metric-item">
+            <strong>Secure</strong>
+            <span>Citizen Data</span>
+          </div>
+          <div className="metric-item">
+            <strong>AI Assisted</strong>
+            <span>Scheme Guidance</span>
+          </div>
+        </div>
+      </header>
+
+      <section className="dashboard-services" aria-label="Primary citizen actions">
         <div className="dashboard-card primary-card">
-          <div className="card-icon">📝</div>
+          <div className="card-head">
+            <span className="card-tag">Recommended</span>
+          </div>
           <h3>Apply for Schemes</h3>
-          <p>Discover and apply for government schemes that match your eligibility</p>
+          <p>Discover eligible schemes and submit your application in guided steps.</p>
+          <ul className="card-points">
+            <li>Personalized scheme matching</li>
+            <li>Simple document checklist</li>
+          </ul>
           <Link to="/citizen/apply" className="card-button">
             Start Application
           </Link>
         </div>
 
         <div className="dashboard-card">
-          <div className="card-icon">📊</div>
+          <div className="card-head">
+            <span className="card-tag">Track</span>
+          </div>
           <h3>Application Status</h3>
-          <p>Track the progress of your submitted applications</p>
+          <p>Monitor each stage of your submitted requests in one consolidated view.</p>
+          <ul className="card-points">
+            <li>Real-time status visibility</li>
+            <li>Clear pending action alerts</li>
+          </ul>
           <Link to="/citizen/status" className="card-button">
             View Status
           </Link>
         </div>
+      </section>
 
-        <div className="dashboard-card">
-          <div className="card-icon">🎯</div>
-          <h3>Risk Prediction</h3>
-          <p>Get insights on application success probability</p>
-          <Link to="/citizen/risk-prediction" className="card-button">
-            Check Risk
-          </Link>
-        </div>
-      </div>
-
-      <div className="dashboard-info">
-        <div className="info-card">
-          <h4>🌾 Grameen File Intelligence System</h4>
+      <section className="dashboard-notice" aria-label="Important information">
+        <article className="notice-card">
+          <h4>About GFIS</h4>
           <p>
-            GFIS helps rural citizens access government schemes through voice and text input.
-            Our AI-powered system simplifies the application process and provides personalized assistance.
+            Grameen File Intelligence System supports rural citizens with voice and text enabled
+            workflows to make government services more accessible and easier to complete.
           </p>
-        </div>
+        </article>
 
-        <div className="info-card">
-          <h4>🔒 Your Data is Secure</h4>
+        <article className="notice-card">
+          <h4>Security and Privacy</h4>
           <p>
-            All your information is encrypted and stored securely. We comply with Government of India
-            data protection standards.
+            Your personal data is encrypted and managed under secure standards aligned with
+            Government of India digital service practices.
           </p>
-        </div>
-      </div>
+        </article>
+      </section>
     </section>
   );
 }

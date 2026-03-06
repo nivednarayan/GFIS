@@ -754,7 +754,7 @@ function SchemeAssist() {
             const submittedMessages = [
               {
                 role: 'bot',
-                text: `✅ Application already submitted! Your Reference ID is: ${submittedState.appId}`,
+                text: `Application already submitted. Your Reference ID is: ${submittedState.appId}`,
               },
               {
                 role: 'bot',
@@ -942,7 +942,7 @@ function SchemeAssist() {
             ...messages,
             {
               role: 'bot',
-              text: '⚠️ Your previous draft was not found (it may have been deleted). A new draft is created. Click Submit Application once again to complete submission.',
+              text: 'Your previous draft was not found (it may have been deleted). A new draft is created. Click Submit Application once again to complete submission.',
             },
           ];
           setMessages(recoveryMessages);
@@ -961,7 +961,7 @@ function SchemeAssist() {
 
         console.log('Application submitted successfully:', submitData);
 
-        const successText = `✅ Application submitted successfully! Your Reference ID is: ${submitData.data.applicationId}. You can follow up on your application status later.`;
+        const successText = `Application submitted successfully. Your Reference ID is: ${submitData.data.applicationId}. You can follow up on your application status later.`;
         const successMessages = [
           ...messages,
           {

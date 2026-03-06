@@ -94,23 +94,23 @@
 
 /* Icon styling for labels */
 .form-group label::before {
-  font-size: 1.1rem;
+  content: none;
 }
 
 .form-group.aadhaar-field label::before {
-  content: '🪪';
+  content: none;
 }
 
 .form-group.name-field label::before {
-  content: '👤';
+  content: none;
 }
 
 .form-group.mobile-field label::before {
-  content: '📱';
+  content: none;
 }
 
 .form-group.email-field label::before {
-  content: '📧';
+  content: none;
 }
 
 .form-group input {
@@ -204,7 +204,8 @@
 }
 
 .alert-error::before {
-  content: '⚠️';
+  content: '!';
+  font-weight: 700;
 }
 
 .alert-success {
@@ -214,7 +215,9 @@
 }
 
 .alert-success::before {
-  content: '✅';
+  content: 'OK';
+  font-weight: 700;
+  font-size: 0.85rem;
 }
 
 .login-footer {

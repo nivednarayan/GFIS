@@ -17,10 +17,10 @@ function Alert({
   ...props 
 }) {
   const icons = {
-    success: '✅',
-    error: '⚠️',
-    warning: '⚡',
-    info: 'ℹ️'
+    success: 'OK',
+    error: '!',
+    warning: '!',
+    info: 'i'
   };
 
   return (

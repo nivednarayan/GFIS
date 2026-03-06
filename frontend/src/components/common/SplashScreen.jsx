@@ -18,7 +18,6 @@ function SplashScreen() {
         
         <div className="splash-footer">
           <div>
-            <span className="emblem">🇮🇳</span>
             <span className="splash-gov-text">Government of India</span>
           </div>
           <div className="splash-tagline">

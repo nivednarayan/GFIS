@@ -75,28 +75,22 @@
 .splash-footer {
   margin-top: 2.5rem;
   padding: 1.5rem 2rem;
-  background: rgba(255, 255, 255, 0.6);
+  background: #eef5ff;
   border-radius: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid #c7dbf2;
   box-shadow: var(--shadow-sm);
   animation: fadeIn 0.8s ease-out 0.3s backwards;
 }
 
-.splash-footer .emblem {
-  font-size: 1.5rem;
-  margin-right: 0.5rem;
-  vertical-align: middle;
-}
-
 .splash-gov-text {
-  color: var(--text-main);
+  color: #1f3e5e;
   font-weight: 600;
   font-size: 1rem;
   vertical-align: middle;
 }
 
 .splash-tagline {
-  color: var(--primary);
+  color: #1f4e79;
   font-weight: 600;
   margin-top: 0.75rem;
   font-size: 0.875rem;

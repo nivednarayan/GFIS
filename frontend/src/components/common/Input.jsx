@@ -4,7 +4,7 @@ import './Input.css';
 /**
  * Government-themed Input Component
  * @param {string} label - Input label
- * @param {string} icon - Emoji or icon to display
+ * @param {string} icon - Optional icon text or symbol to display
  * @param {string} helperText - Helper text below input
  * @param {string} error - Error message
  * @param {boolean} required - Shows required indicator
@@ -52,7 +52,7 @@ function Input({
       </div>
 
       {error && (
-        <span className="gov-input__error">⚠️ {error}</span>
+        <span className="gov-input__error">Error: {error}</span>
       )}
       
       {helperText && !error && (

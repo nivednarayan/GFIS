@@ -224,7 +224,6 @@ function Signup() {
 
           <div className="gov-badge">
             <p>
-              <span className="emblem">🇮🇳</span>
               <span>Government of India Portal</span>
             </p>
           </div>
