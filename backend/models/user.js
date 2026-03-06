@@ -24,8 +24,17 @@ const userSchema = new mongoose.Schema(
     },
     userType: {
       type: String,
-      enum: ["citizen", "admin"],
+      enum: ["citizen"],
       default: "citizen",
+    },
+    password: {
+      type: String,
+      required: false,
+      select: false,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
     },
     address: {
       type: String,

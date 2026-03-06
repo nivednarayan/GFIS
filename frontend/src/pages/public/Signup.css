@@ -1,0 +1,342 @@
+/* Signup Page - Government India Theme */
+.signup-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: var(--bg-main);
+  padding: 1.5rem;
+  position: relative;
+}
+
+/* Subtle background pattern */
+.signup-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(90deg, rgba(31, 78, 121, 0.02) 1px, transparent 1px),
+    linear-gradient(rgba(31, 78, 121, 0.02) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+}
+
+.signup-container {
+  width: 100%;
+  max-width: 550px;
+  position: relative;
+  z-index: 1;
+}
+
+.signup-card {
+  background: var(--bg-card);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  padding: 3rem 2.5rem;
+  border-top: 5px solid var(--primary);
+  border-bottom: 3px solid var(--accent);
+}
+
+.signup-logo {
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+.signup-logo img {
+  max-width: 140px;
+  height: auto;
+  display: inline-block;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.signup-card h2 {
+  font-size: 1.75rem;
+  color: var(--primary);
+  margin: 0 0 0.5rem 0;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.signup-subtitle {
+  text-align: center;
+  color: var(--text-secondary);
+  margin: 0 0 2rem 0;
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+
+.signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  position: relative;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+.form-group label {
+  font-weight: 600;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Icon styling for labels */
+.form-group label::before {
+  font-size: 1.1rem;
+}
+
+.form-group.aadhaar-field label::before {
+  content: '🪪';
+}
+
+.form-group.name-field label::before {
+  content: '👤';
+}
+
+.form-group.mobile-field label::before {
+  content: '📱';
+}
+
+.form-group.email-field label::before {
+  content: '📧';
+}
+
+.form-group.location-field label::before {
+  content: '📍';
+}
+
+.form-group input {
+  padding: 0.875rem 1rem;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  background-color: var(--bg-card);
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(31, 78, 121, 0.1);
+}
+
+.form-group input:disabled {
+  background-color: #F3F4F6;
+  cursor: not-allowed;
+  color: var(--text-light);
+}
+
+.char-count {
+  position: absolute;
+  right: 1rem;
+  top: 2.15rem;
+  font-size: 0.8rem;
+  color: var(--text-light);
+  background: var(--bg-card);
+  padding: 0.25rem 0.4rem;
+  font-weight: 500;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.signup-button {
+  background: var(--secondary);
+  color: white;
+  padding: 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 0.5rem;
+  box-shadow: var(--shadow-sm);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.signup-button:hover:not(:disabled) {
+  background: #1B5E20;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.signup-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.signup-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.alert {
+  padding: 1rem 1.25rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+  border-left: 5px solid;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  line-height: 1.5;
+}
+
+.alert::before {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.alert-error {
+  background-color: #FEF2F2;
+  color: #991B1B;
+  border-color: var(--error);
+}
+
+.alert-error::before {
+  content: '⚠️';
+}
+
+.alert-success {
+  background-color: #F0FDF4;
+  color: #166534;
+  border-color: var(--success);
+}
+
+.alert-success::before {
+  content: '✅';
+}
+
+.signup-footer {
+  text-align: center;
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.75rem;
+  border-bottom: 2px solid var(--border);
+}
+
+.signup-footer p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.signup-footer a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.signup-footer a:hover {
+  color: var(--secondary);
+  text-decoration: underline;
+}
+
+.signup-info {
+  background: #EFF6FF;
+  border: 2px solid #BFDBFE;
+  border-radius: 6px;
+  padding: 1.25rem;
+}
+
+.signup-info p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  line-height: 1.6;
+}
+
+.signup-info strong {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* Government Portal Badge */
+.gov-badge {
+  text-align: center;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid var(--border);
+}
+
+.gov-badge p {
+  margin: 0;
+  color: var(--text-light);
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.gov-badge .emblem {
+  font-size: 1.5rem;
+}
+
+/* Responsive Design - Mobile First */
+@media (max-width: 600px) {
+  .signup-page {
+    padding: 1rem;
+    align-items: flex-start;
+    padding-top: 2rem;
+  }
+
+  .signup-card {
+    padding: 2rem 1.5rem;
+  }
+
+  .signup-card h2 {
+    font-size: 1.5rem;
+  }
+
+  .signup-form {
+    gap: 1rem;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .form-group label {
+    font-size: 0.9rem;
+  }
+
+  .form-group input {
+    padding: 0.75rem;
+    font-size: 0.95rem;
+  }
+
+  .char-count {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .signup-logo img {
+    max-width: 100px;
+  }
+
+  .signup-card h2 {
+    font-size: 1.35rem;
+  }
+}

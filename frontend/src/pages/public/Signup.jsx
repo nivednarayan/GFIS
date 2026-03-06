@@ -2,22 +2,31 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import logo from "../../assets/logo.png";
-import "./Login.css";
+import "./Signup.css";
 
-function Login() {
+function Signup() {
   const [aadhaar, setAadhaar] = useState("");
   const [fullName, setFullName] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
+  const [email, setEmail] = useState("");
+  const [district, setDistrict] = useState("");
+  const [state, setState] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { signup } = useAuth();
 
   // Aadhaar validation
   const validateAadhaar = (value) => /^\d{0,12}$/.test(value);
 
   // Mobile validation
   const validateMobile = (value) => /^\d{0,10}$/.test(value);
+
+  // Email validation
+  const validateEmail = (email) => {
+    if (!email) return true; // Optional field
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
 
   const handleAadhaarChange = (e) => {
     const value = e.target.value;
@@ -32,6 +41,10 @@ function Login() {
     if (validateMobile(value)) {
       setMobileNumber(value);
     }
+  };
+
+  const handleEmailChange = (e) => {
+    setEmail(e.target.value);
   };
 
   const handleSubmit = async (e) => {
@@ -58,41 +71,54 @@ function Login() {
       return;
     }
 
+    if (email && !validateEmail(email)) {
+      setError("Please enter a valid email address");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await login(aadhaar, fullName, mobileNumber);
+      const response = await signup(
+        aadhaar,
+        fullName,
+        mobileNumber,
+        email,
+        district,
+        state
+      );
 
       if (response.success) {
         navigate("/citizen");
       } else {
-        setError(response.message || "Login failed. Please try again.");
+        setError(response.message || "Sign up failed. Please try again.");
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
-      console.error("Login error:", err);
+      console.error("Sign up error:", err);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <section className="login-page">
-      <div className="login-container">
-        <div className="login-card">
-          <div className="login-logo">
+    <section className="signup-page">
+      <div className="signup-container">
+        <div className="signup-card">
+          <div className="signup-logo">
             <img src={logo} alt="GFIS Logo" />
           </div>
-          <h2>Citizen Login</h2>
-          <p className="login-subtitle">Access GFIS Services with Aadhaar</p>
+          <h2>Create Account</h2>
+          <p className="signup-subtitle">Register with Aadhaar for GFIS Services</p>
 
           {error && <div className="alert alert-error">{error}</div>}
 
-          <form onSubmit={handleSubmit} className="login-form">
+          <form onSubmit={handleSubmit} className="signup-form">
             <div className="form-group aadhaar-field">
               <label htmlFor="aadhaar">Aadhaar Number *</label>
               <input
                 id="aadhaar"
                 type="text"
-                placeholder="Enter 12-digit Aadhaar number"
+                placeholder="Enter 12-digit Aadhaar"
                 value={aadhaar}
                 onChange={handleAadhaarChange}
                 maxLength="12"
@@ -135,24 +161,64 @@ function Login() {
               <span className="char-count">{mobileNumber.length}/10</span>
             </div>
 
+            <div className="form-group email-field">
+              <label htmlFor="email">Email Address (Optional)</label>
+              <input
+                id="email"
+                type="email"
+                placeholder="Enter your email address"
+                value={email}
+                onChange={handleEmailChange}
+                disabled={loading}
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="form-row">
+              <div className="form-group location-field">
+                <label htmlFor="district">District</label>
+                <input
+                  id="district"
+                  type="text"
+                  placeholder="Your district"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  disabled={loading}
+                  autoComplete="address-level2"
+                />
+              </div>
+
+              <div className="form-group location-field">
+                <label htmlFor="state">State</label>
+                <input
+                  id="state"
+                  type="text"
+                  placeholder="Your state"
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                  disabled={loading}
+                  autoComplete="address-level1"
+                />
+              </div>
+            </div>
+
             <button
               type="submit"
-              className="login-button"
+              className="signup-button"
               disabled={loading}
             >
-              {loading ? "Logging in..." : "Login"}
+              {loading ? "Creating Account..." : "Sign Up"}
             </button>
           </form>
 
-          <div className="login-footer">
-            <p>Don't have an account? <Link to="/signup">Sign up here</Link></p>
+          <div className="signup-footer">
+            <p>Already have an account? <Link to="/login">Login here</Link></p>
           </div>
 
-          <div className="login-info">
+          <div className="signup-info">
             <p>
-              <strong>Secure Access:</strong> Your Aadhaar number is your unique
-              identification. We use it to verify your identity and provide
-              personalized government assistance.
+              <strong>Secure Registration:</strong> Your information is encrypted
+              and protected. Aadhaar is used as your unique identification for accessing government schemes.
             </p>
           </div>
 
@@ -168,5 +234,5 @@ function Login() {
   );
 }
 
-export default Login;
+export default Signup;
 
