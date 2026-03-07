@@ -1,6 +1,5 @@
 // backend/services/inputProcessor.js
 
-const UserInput = require("../models/user_input");
 const { cleanText } = require("../utils/text_cleaner");
 const {
   extractName,
@@ -17,13 +16,13 @@ function interpretInput(rawText) {
   const scheme = extractScheme(cleanedText);
   const intent = extractIntent(cleanedText);
 
-  return new UserInput({
+  return {
     rawText,
     name,
     age,
     scheme,
-    intent
-  });
+    intent,
+  };
 }
 
 module.exports = { interpretInput };

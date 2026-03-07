@@ -20,9 +20,3 @@ function apply_confidence_score(validation_result) {
 }
 
 module.exports = { apply_confidence_score };
-function calculateConfidence(passed, total) {
-  if (total === 0) return 0;
-  return Math.round((passed / total) * 100);
-}
-
-module.exports = calculateConfidence;

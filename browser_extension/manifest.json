@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "GFIS Form Assistant",
+  "version": "1.0",
+  "description": "AI assistant to help citizens fill government forms correctly",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup/pop.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/content.js"]
+    }
+  ]
+}
