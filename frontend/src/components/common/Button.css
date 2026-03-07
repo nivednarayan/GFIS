@@ -1,0 +1,116 @@
+/* Government-themed Button Component */
+.gov-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-height: 44px; /* Accessibility - tap target */
+}
+
+.gov-button__icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* Primary Variant - Green */
+.gov-button--primary {
+  background: var(--secondary);
+  color: white;
+}
+
+.gov-button--primary:hover:not(:disabled) {
+  background: #1B5E20;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Secondary Variant - Blue */
+.gov-button--secondary {
+  background: var(--primary);
+  color: white;
+}
+
+.gov-button--secondary:hover:not(:disabled) {
+  background: #163A5F;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Outline Variant */
+.gov-button--outline {
+  background: transparent;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  box-shadow: none;
+}
+
+.gov-button--outline:hover:not(:disabled) {
+  background: var(--primary);
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* Danger Variant */
+.gov-button--danger {
+  background: var(--error);
+  color: white;
+}
+
+.gov-button--danger:hover:not(:disabled) {
+  background: #B71C1C;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Sizes */
+.gov-button--small {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  min-height: 36px;
+}
+
+.gov-button--medium {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  min-height: 44px;
+}
+
+.gov-button--large {
+  padding: 1rem 2rem;
+  font-size: 1.125rem;
+  min-height: 52px;
+}
+
+/* Full Width */
+.gov-button--full {
+  width: 100%;
+}
+
+/* Disabled State */
+.gov-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Active State */
+.gov-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Focus State - Accessibility */
+.gov-button:focus-visible {
+  outline: 3px solid rgba(46, 125, 50, 0.3);
+  outline-offset: 2px;
+}

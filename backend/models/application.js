@@ -69,6 +69,48 @@ const applicationSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    riskSignals: {
+      ageMismatchFlag: {
+        type: Boolean,
+        default: null,
+      },
+      incomeIneligibleFlag: {
+        type: Boolean,
+        default: null,
+      },
+      missingDocumentsFlag: {
+        type: Boolean,
+        default: null,
+      },
+      duplicateFlag: {
+        type: Boolean,
+        default: null,
+      },
+      processingDelayDays: {
+        type: Number,
+        default: null,
+      },
+    },
+    riskScore: {
+      type: Number,
+      default: null,
+    },
+    riskLevel: {
+      type: String,
+      enum: ["Low", "Medium", "High"],
+      default: null,
+    },
+    aiAnalysis: {
+      rejectionProbability: {
+        type: Number,
+        default: null,
+      },
+      topReasons: [String],
+      fraudIndicator: {
+        type: String,
+        default: null,
+      },
+    },
   },
   { timestamps: true }
 );

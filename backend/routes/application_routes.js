@@ -3,6 +3,7 @@ const router = express.Router();
 const Application = require("../models/application");
 const UserInput = require("../models/user_input");
 const DocumentData = require("../models/document_data");
+const { assessApplicationRisk } = require("../services/riskAssessmentService");
 const fs = require("fs");
 const path = require("path");
 const mongoose = require("mongoose");
@@ -113,19 +114,8 @@ router.post("/applications/:applicationId/save-answer", async (req, res) => {
       });
     }
 
-    // Save to collectedAnswers (for quick retrieval)
-    application.collectedAnswers[fieldName] = answer;
-
-    // Save to userInputs (for audit trail)
-    application.userInputs.push({
-      fieldName,
-      fieldLabel,
-      fieldType,
-      answer,
-      answeredAt: new Date(),
-    });
-
-    await application.save();
+    // Do not store answer payload in applications collection.
+    // Answers are persisted only in UserInput collection.
 
     const now = new Date();
     const responsePath = `responses.${fieldName}`;
@@ -182,31 +172,48 @@ router.post("/applications/:applicationId/save-answer", async (req, res) => {
   }
 });
 
-// POST /api/applications/:applicationId/submit - Submit complete application
+// POST /api/applications/:applicationId/submit - Submit complete application with risk assessment
+// Workflow: Reads from UserInput collection → Runs risk analysis → Stores risk results in Application
 router.post("/applications/:applicationId/submit", async (req, res) => {
   try {
     const { applicationId } = req.params;
     const { collectedAnswers } = req.body;
 
-    console.log(`[SUBMIT] Received submission for application: ${applicationId}`);
-    console.log(`[SUBMIT] Collected answers:`, collectedAnswers);
+    console.log(`[SUBMIT] Processing submission for application: ${applicationId}`);
 
+    // Step 1: Find and validate the application
     const application = await findApplicationByIdentifier(applicationId);
 
     if (!application) {
+      console.error(`[SUBMIT] Application not found: ${applicationId}`);
       return res.status(404).json({
         success: false,
         message: "Application not found",
+        requestedId: applicationId,
       });
     }
 
-    // Update with final answers if provided
-    if (collectedAnswers) {
-      application.collectedAnswers = {
-        ...application.collectedAnswers,
-        ...collectedAnswers,
-      };
+    console.log(`[SUBMIT] Found application, current status: ${application.status}`);
 
+    // Step 2: Fetch user input data from UserInput collection (source of truth for responses)
+    const userInputDoc = await UserInput.findOne({ applicationId: application._id }).lean();
+    const userResponses = userInputDoc?.responses || {};
+    
+    console.log(`[SUBMIT] Retrieved user input data with ${Object.keys(userResponses).length} responses`);
+
+    // Step 3: Build comprehensive application data for risk assessment
+    // Combine collectedAnswers from request with stored UserInput responses
+    const mergedAnswers = {
+      ...userResponses,
+      ...collectedAnswers, // Request data takes precedence
+    };
+
+    // Update application with merged answers
+    application.collectedAnswers = mergedAnswers;
+    let totalAnswers = 0;
+
+    // Persist final answers only in UserInput collection
+    if (collectedAnswers) {
       const now = new Date();
       const responseEntries = Object.entries(collectedAnswers);
 
@@ -224,6 +231,7 @@ router.post("/applications/:applicationId/submit", async (req, res) => {
           ...(existingUserInput?.responses || {}),
           ...collectedAnswers,
         };
+        totalAnswers = Object.keys(mergedResponses).length;
 
         await UserInput.findOneAndUpdate(
           { applicationId: application._id },
@@ -232,7 +240,7 @@ router.post("/applications/:applicationId/submit", async (req, res) => {
               applicationRefId: application.applicationId,
               schemeId: application.schemeId,
               responses: mergedResponses,
-              totalAnswers: Object.keys(mergedResponses).length,
+              totalAnswers,
               lastAnsweredAt: now,
             },
             $push: {
@@ -245,33 +253,123 @@ router.post("/applications/:applicationId/submit", async (req, res) => {
           { upsert: true, new: true }
         );
 
-        const existingInputMap = new Map(
-          (application.userInputs || []).map((item) => [item.fieldName, item])
-        );
-
-        responseEntries.forEach(([fieldName, answer]) => {
-          existingInputMap.set(fieldName, {
-            fieldName,
-            fieldLabel: existingInputMap.get(fieldName)?.fieldLabel || fieldName,
-            fieldType: typeof answer,
-            answer,
-            answeredAt: now,
-          });
-        });
-
-        application.userInputs = Array.from(existingInputMap.values());
       }
     }
+
+    // Ensure no input payload remains in applications collection
+    application.collectedAnswers = {};
+    application.userInputs = [];
 
     // Mark as submitted
     application.status = "submitted";
     application.submittedAt = new Date();
 
+    // Step 4: Save application state before risk assessment
     await application.save();
+    console.log(`[SUBMIT] Application marked as submitted`);
 
+    // Step 5: Prepare data for risk assessment
+    // Risk analysis should see complete user profile data
+    const applicationForRiskAssessment = {
+      ...application.toObject(),
+      collectedAnswers: mergedAnswers, // Use merged responses
+      userInputs: application.userInputs || [],
+    };
+
+    // Step 6: Run risk assessment on merged data
+    console.log(`[SUBMIT] Running risk assessment with ${Object.keys(mergedAnswers).length} user responses`);
+    const riskAssessmentResult = await assessApplicationRisk(applicationForRiskAssessment);
+
+    if (riskAssessmentResult.success) {
+      const { riskSignals, riskScore, riskLevel, aiAnalysis } = riskAssessmentResult.data;
+
+      console.log(`[SUBMIT] Risk assessment completed:`, {
+        riskScore,
+        riskLevel,
+        hasSignals: !!riskSignals,
+      });
+
+      // Step 7: Update ONLY risk fields in Application using $set
+      // This ensures we don't overwrite other application data
+      const updatedApplication = await Application.findByIdAndUpdate(
+        application._id,
+        {
+          $set: {
+            riskSignals,
+            riskScore,
+            riskLevel,
+            aiAnalysis,
+            updatedAt: new Date(),
+          },
+        },
+        { new: true }
+      );
+
+      if (!updatedApplication) {
+        throw new Error("Failed to update application with risk assessment");
+      }
+
+      console.log(`[SUBMIT] Application successfully updated with risk assessment`);
+
+      // Step 8: Ensure UserInput is also updated with submission metadata
+      await UserInput.findOneAndUpdate(
+        { applicationId: application._id },
+        {
+          $set: {
+            applicationRefId: application.applicationId,
+            schemeId: application.schemeId,
+            responses: mergedAnswers,
+            totalAnswers: Object.keys(mergedAnswers).length,
+            lastAnsweredAt: new Date(),
+            submittedAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+      // Step 9: Return complete response with risk assessment
+      res.json({
+        success: true,
+        message: "Application submitted successfully with risk assessment",
+        data: {
+          applicationId: updatedApplication.applicationId,
+          schemeId: updatedApplication.schemeId,
+          schemeName: updatedApplication.schemeName,
+          status: updatedApplication.status,
+          submittedAt: updatedApplication.submittedAt,
+          totalAnswers: Object.keys(mergedAnswers).length,
+          riskAssessment: {
+            riskScore: updatedApplication.riskScore,
+            riskLevel: updatedApplication.riskLevel,
+            riskSignals: updatedApplication.riskSignals,
+            aiAnalysis: updatedApplication.aiAnalysis,
+          },
+        },
+      });
+    } else {
+      // Risk assessment failed but submission succeeded
+      console.warn(`[SUBMIT] Risk assessment incomplete: ${riskAssessmentResult.error}`);
+
+      res.json({
+        success: true,
+        message: "Application submitted (risk assessment pending)",
+        data: {
+          applicationId: application.applicationId,
+          schemeId: application.schemeId,
+          schemeName: application.schemeName,
+          status: application.status,
+          submittedAt: application.submittedAt,
+          totalAnswers: Object.keys(mergedAnswers).length,
+          riskAssessment: {
+            status: "pending",
+            error: riskAssessmentResult.error,
+          },
+        },
+      });
+    }
     console.log(`[SUBMIT] Application saved to MongoDB successfully`);
     console.log(`[SUBMIT] Application ID: ${application.applicationId}, Status: ${application.status}`);
-    console.log(`[SUBMIT] Total answers saved: ${Object.keys(application.collectedAnswers).length}`);
+    console.log(`[SUBMIT] Total answers saved in userinputs: ${totalAnswers}`);
 
     res.json({
       success: true,
@@ -281,11 +379,13 @@ router.post("/applications/:applicationId/submit", async (req, res) => {
         schemeId: application.schemeId,
         status: application.status,
         submittedAt: application.submittedAt,
-        totalAnswers: Object.keys(application.collectedAnswers).length,
+        totalAnswers,
       },
     });
   } catch (error) {
-    console.error("Error submitting application:", error);
+    console.error("[SUBMIT] Error submitting application:", error);
+    console.error("[SUBMIT] Stack:", error.stack);
+    
     res.status(500).json({
       success: false,
       message: "Error submitting application",
@@ -316,8 +416,6 @@ router.get("/applications/:applicationId", async (req, res) => {
         schemeId: application.schemeId,
         schemeName: application.schemeName,
         status: application.status,
-        collectedAnswers: application.collectedAnswers,
-        userInputs: application.userInputs,
         groupedUserInputs: await UserInput.findOne({ applicationId: application._id }).lean(),
         submittedAt: application.submittedAt,
         createdAt: application.createdAt,
@@ -357,6 +455,58 @@ router.get("/applications", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error listing applications",
+      error: error.message,
+    });
+  }
+});
+
+// DELETE /api/applications/cleanup/draft - Clean up abandoned draft applications
+// Removes draft applications older than 24 hours (no user input data)
+router.delete("/applications/cleanup/draft", async (req, res) => {
+  try {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Find draft applications with no user inputs created more than 24 hours ago
+    const abandonedDrafts = await Application.find({
+      status: "draft",
+      createdAt: { $lt: oneDayAgo },
+      userInputs: { $size: 0 }, // No inputs saved
+    });
+
+    if (abandonedDrafts.length === 0) {
+      return res.json({
+        success: true,
+        message: "No abandoned draft applications to clean up",
+        deletedCount: 0,
+      });
+    }
+
+    const draftIds = abandonedDrafts.map((app) => app._id);
+
+    // Delete abandoned drafts and their associated UserInput records
+    const deleteResult = await Application.deleteMany({
+      _id: { $in: draftIds },
+    });
+
+    await UserInput.deleteMany({
+      applicationId: { $in: draftIds },
+    });
+
+    console.log(
+      `[CLEANUP] Removed ${deleteResult.deletedCount} abandoned draft applications`
+    );
+
+    res.json({
+      success: true,
+      message: "Cleanup completed",
+      deletedCount: deleteResult.deletedCount,
+      applicationIds: abandonedDrafts.map((app) => app.applicationId),
+    });
+  } catch (error) {
+    console.error("Error cleaning up draft applications:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error cleaning up draft applications",
       error: error.message,
     });
   }

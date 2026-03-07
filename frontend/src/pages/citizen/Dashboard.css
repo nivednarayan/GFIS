@@ -1,0 +1,278 @@
+/* Dashboard - Government India Theme */
+.dashboard-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.dashboard-hero {
+  background: linear-gradient(135deg, #f7fbff 0%, #eef6ff 100%);
+  border: 1px solid #d4e6f8;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1.75rem;
+}
+
+.hero-badge {
+  display: inline-block;
+  margin: 0 0 0.85rem 0;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: #e5f0fc;
+  border: 1px solid #c6dbf5;
+  color: #1f4e79;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.dashboard-hero h2 {
+  font-size: 2rem;
+  color: var(--primary);
+  font-weight: 700;
+  margin: 0 0 0.65rem 0;
+  letter-spacing: -0.5px;
+}
+
+.hero-subtitle {
+  font-size: 1.02rem;
+  color: #445b72;
+  margin: 0;
+  max-width: 760px;
+  line-height: 1.7;
+}
+
+.hero-metrics {
+  margin-top: 1.35rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.metric-item {
+  background: #ffffff;
+  border: 1px solid #dbe8f4;
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.metric-item strong {
+  color: var(--primary);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.metric-item span {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Dashboard Cards Grid */
+.dashboard-services {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.dashboard-card {
+  background: var(--bg-card);
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid #d8e2ec;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: #aac8e6;
+}
+
+.dashboard-card.primary-card {
+  border-color: #b9dfc0;
+  background: linear-gradient(135deg, #f4fcf5 0%, #ffffff 100%);
+}
+
+.dashboard-card.primary-card:hover {
+  border-color: #95c9a0;
+}
+
+.card-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 0.65rem;
+}
+
+.card-tag {
+  background: #eef5ff;
+  color: #2f5f91;
+  border: 1px solid #d2e2f3;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-card h3 {
+  font-size: 1.2rem;
+  color: var(--text-main);
+  margin: 0 0 0.55rem 0;
+  font-weight: 700;
+}
+
+.dashboard-card p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 0.9rem 0;
+  font-size: 0.95rem;
+}
+
+.card-points {
+  margin: 0 0 1.2rem 0;
+  padding: 0;
+  list-style: none;
+  width: 100%;
+}
+
+.card-points li {
+  position: relative;
+  padding-left: 1rem;
+  color: #4d6278;
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.card-points li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--secondary);
+}
+
+.card-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.78rem 1.2rem;
+  background: var(--secondary);
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  min-height: 44px;
+}
+
+.card-button:hover {
+  background: #1B5E20;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  text-decoration: none;
+}
+
+.primary-card .card-button {
+  background: var(--primary);
+}
+
+.primary-card .card-button:hover {
+  background: #163A5F;
+}
+
+/* Information Cards */
+.dashboard-notice {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.notice-card {
+  background: #f8fbff;
+  border: 1px solid #d6e7f6;
+  border-radius: 10px;
+  padding: 1.2rem;
+}
+
+.notice-card h4 {
+  font-size: 1rem;
+  color: var(--primary);
+  margin: 0 0 0.55rem 0;
+  font-weight: 700;
+}
+
+.notice-card p {
+  color: #4c6278;
+  line-height: 1.65;
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .dashboard-page {
+    padding: 1.5rem;
+  }
+
+  .dashboard-hero {
+    padding: 1.5rem;
+  }
+
+  .dashboard-hero h2 {
+    font-size: 1.6rem;
+  }
+
+  .hero-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-services {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+
+  .dashboard-card {
+    padding: 1.5rem;
+  }
+
+  .dashboard-card h3 {
+    font-size: 1.15rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-page {
+    padding: 1rem;
+  }
+
+  .dashboard-hero h2 {
+    font-size: 1.4rem;
+  }
+
+  .dashboard-notice {
+    grid-template-columns: 1fr;
+  }
+
+  .card-button {
+    width: 100%;
+  }
+}

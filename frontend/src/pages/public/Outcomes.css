@@ -1,0 +1,158 @@
+.outcomes-page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 2.5rem;
+}
+
+.outcomes-hero {
+  background: linear-gradient(135deg, #f7fbff 0%, #eef5ff 100%);
+  border: 1px solid #d6e6f6;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.outcomes-badge {
+  display: inline-block;
+  margin: 0 0 0.75rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: #e6f1fd;
+  border: 1px solid #c5dcf4;
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.outcomes-hero h2 {
+  margin: 0 0 0.5rem;
+  color: var(--primary);
+  font-size: 1.9rem;
+}
+
+.outcomes-hero p {
+  margin: 0;
+  color: #48607a;
+  line-height: 1.65;
+}
+
+.outcomes-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.metric-card {
+  background: #ffffff;
+  border: 1px solid #d9e5f1;
+  border-radius: 10px;
+  padding: 1.2rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.metric-card h3 {
+  margin: 0 0 0.7rem;
+  font-size: 1rem;
+  color: #1f3f60;
+}
+
+.metric-value {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.metric-note {
+  margin-top: 0.65rem;
+  color: #596f85;
+  font-size: 0.9rem;
+}
+
+.metric-card.success .metric-value {
+  color: #236c2a;
+}
+
+.metric-card.rejection .metric-value {
+  color: #b22a2a;
+}
+
+.metric-card.pending .metric-value {
+  color: #a46207;
+}
+
+.outcomes-breakdown {
+  margin-top: 1rem;
+  background: #ffffff;
+  border: 1px solid #d9e5f1;
+  border-radius: 12px;
+  padding: 1.3rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.outcomes-breakdown h3 {
+  margin: 0 0 0.9rem;
+  color: var(--primary);
+}
+
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.break-card {
+  border: 1px solid #e2ebf5;
+  border-radius: 10px;
+  padding: 1rem;
+  background: #fafcff;
+}
+
+.break-card h4 {
+  margin: 0 0 0.6rem;
+  color: #1f4e79;
+}
+
+.break-card ul {
+  margin: 0;
+  padding-left: 1rem;
+  color: #4f657c;
+  line-height: 1.6;
+}
+
+.outcomes-note {
+  margin-top: 1rem;
+  padding: 1rem 1.2rem;
+  border-radius: 10px;
+  border: 1px solid #cce0f5;
+  background: #eef6ff;
+}
+
+.outcomes-note p {
+  margin: 0;
+  color: #355572;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 900px) {
+  .outcomes-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .outcomes-page {
+    padding: 1.1rem 0.8rem 1.4rem;
+  }
+
+  .outcomes-hero h2 {
+    font-size: 1.45rem;
+  }
+}
