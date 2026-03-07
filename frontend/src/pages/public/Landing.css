@@ -171,8 +171,121 @@
   border: 1px solid #d2e5f8;
 }
 
+.process-section,
+.standards-section,
+.help-section {
+  margin-top: 1.25rem;
+  background: #ffffff;
+  border: 1px solid #dfe7ef;
+  border-radius: 12px;
+  padding: 1.15rem 1.2rem;
+}
+
+.process-section h4,
+.standards-section h4,
+.help-section h4 {
+  margin: 0 0 0.85rem;
+  color: var(--primary);
+}
+
+.process-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.process-step {
+  border: 1px solid #e2e9f1;
+  border-radius: 10px;
+  padding: 0.9rem;
+  background: #fbfdff;
+}
+
+.step-index {
+  display: inline-flex;
+  min-width: 44px;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: #e6eff8;
+  color: #1f4e79;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.process-step h5,
+.standard-card h5 {
+  margin: 0.62rem 0 0.42rem;
+  color: #23425f;
+  font-size: 0.98rem;
+}
+
+.process-step p,
+.standard-card p,
+.help-section p {
+  margin: 0;
+  color: #4b5d70;
+  line-height: 1.55;
+  font-size: 0.93rem;
+}
+
+.standards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.standard-card {
+  border: 1px solid #e2e9f1;
+  border-radius: 10px;
+  padding: 0.9rem;
+  background: #f9fcff;
+}
+
+.help-actions {
+  margin-top: 0.85rem;
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.help-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--secondary);
+  border: 2px solid var(--secondary);
+}
+
+.help-link:hover {
+  text-decoration: none;
+  background: #1f6f2b;
+  border-color: #1f6f2b;
+}
+
+.help-link.secondary {
+  background: #ffffff;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.help-link.secondary:hover {
+  background: #f0f6ff;
+}
+
 @media (max-width: 900px) {
   .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .process-grid,
+  .standards-grid {
     grid-template-columns: 1fr;
   }
 

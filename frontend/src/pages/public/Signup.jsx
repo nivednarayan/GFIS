@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import SplashScreen from "../../components/common/SplashScreen";
 import logo from "../../assets/logo.png";
 import "./Signup.css";
 
@@ -13,8 +14,18 @@ function Signup() {
   const [state, setState] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showSuccessSplash, setShowSuccessSplash] = useState(false);
+  const redirectTimerRef = useRef(null);
   const navigate = useNavigate();
   const { signup } = useAuth();
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
 
   // Aadhaar validation
   const validateAadhaar = (value) => /^\d{0,12}$/.test(value);
@@ -88,7 +99,10 @@ function Signup() {
       );
 
       if (response.success) {
-        navigate("/citizen");
+        setShowSuccessSplash(true);
+        redirectTimerRef.current = setTimeout(() => {
+          navigate("/citizen", { replace: true });
+        }, 2200);
       } else {
         setError(response.message || "Sign up failed. Please try again.");
       }
@@ -99,6 +113,10 @@ function Signup() {
       setLoading(false);
     }
   };
+
+  if (showSuccessSplash) {
+    return <SplashScreen />;
+  }
 
   return (
     <section className="signup-page">

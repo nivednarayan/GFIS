@@ -480,6 +480,8 @@ const extractAnswersFromIntro = (requiredFields, introText) => {
 };
 
 const extractAnswersFromIntroAPI = async (requiredFields, introText) => {
+  const localExtraction = extractAnswersFromIntro(requiredFields, introText);
+
   try {
     const response = await fetch(`${API_BASE_URL}/input/extract-intro`, {
       method: 'POST',
@@ -491,18 +493,22 @@ const extractAnswersFromIntroAPI = async (requiredFields, introText) => {
     });
 
     if (!response.ok) {
-      return extractAnswersFromIntro(requiredFields, introText);
+      return localExtraction;
     }
 
     const payload = await response.json();
     const extracted = payload?.data?.extracted;
     if (!extracted || typeof extracted !== 'object') {
-      return extractAnswersFromIntro(requiredFields, introText);
+      return localExtraction;
     }
 
-    return extracted;
+    // Keep deterministic local extraction as a safety net when API misses fields.
+    return {
+      ...localExtraction,
+      ...extracted,
+    };
   } catch (error) {
-    return extractAnswersFromIntro(requiredFields, introText);
+    return localExtraction;
   }
 };
 
@@ -510,6 +516,8 @@ function SchemeAssist() {
   const { schemeId } = useParams();
   const { user } = useAuth();
   const recognitionRef = useRef(null);
+  const latestChatInputRef = useRef('');
+  const voiceSessionBaseRef = useRef('');
   const initializationRef = useRef(false); // Prevent React.StrictMode double initialization
   const speedChangeTimeoutRef = useRef(null); // Debounce speed changes
   const spokenMessagesIndexRef = useRef(-1); // Track last message that was spoken
@@ -531,12 +539,33 @@ function SchemeAssist() {
   const [speechRate, setSpeechRate] = useState(1);
   const [lastBotMessage, setLastBotMessage] = useState('');
   const [isSpeechPaused, setIsSpeechPaused] = useState(false);
+  const [speechSessionKey, setSpeechSessionKey] = useState(0);
   const guidedFields = useMemo(() => (schemeData ? buildGuidedFields(schemeData) : []), [schemeData]);
   const requiredGuidedFields = useMemo(
     () => guidedFields.filter((field) => field.required),
     [guidedFields],
   );
   const loggedInAadhaar = useMemo(() => getLoggedInAadhaar(user), [user]);
+
+  const buildAadhaarAcceptedMessage = useCallback(() => {
+    if (!loggedInAadhaar || !requiredGuidedFields.length) return '';
+
+    const maskedAadhaar = `XXXX-XXXX-${loggedInAadhaar.slice(-4)}`;
+    return `Step 1/${requiredGuidedFields.length} (Identity)\nAadhaar already accepted from your login profile: ${maskedAadhaar}.`;
+  }, [loggedInAadhaar, requiredGuidedFields.length]);
+
+  const markLatestBotMessageForReplay = useCallback((chatMessages = []) => {
+    let lastBotMessageIndex = -1;
+
+    for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
+      if (chatMessages[index]?.role === 'bot') {
+        lastBotMessageIndex = index;
+        break;
+      }
+    }
+
+    spokenMessagesIndexRef.current = lastBotMessageIndex - 1;
+  }, []);
 
   const enforceLoggedInAadhaar = useCallback(
     (answers = {}) => {
@@ -694,15 +723,19 @@ function SchemeAssist() {
     }
   };
 
-  const speakText = useCallback((text, speed = speechRate) => {
+  const speakText = useCallback((text, options = {}) => {
+    const { speed = speechRate, forceRestart = false } = options;
+
     if (!textToSpeechEnabled || !('speechSynthesis' in window)) {
       return;
     }
 
-    // Immediately cancel and resume for instant response
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.resume();
-    setIsSpeechPaused(false);
+    // Only interrupt current playback for explicit replay/override actions.
+    if (forceRestart) {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
+      setIsSpeechPaused(false);
+    }
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = speed;
@@ -729,7 +762,7 @@ function SchemeAssist() {
 
   const repeatLastPrompt = useCallback(() => {
     if (lastBotMessage && textToSpeechEnabled) {
-      speakText(lastBotMessage, speechRate);
+      speakText(lastBotMessage, { speed: speechRate, forceRestart: true });
     }
   }, [lastBotMessage, textToSpeechEnabled, speechRate, speakText]);
 
@@ -768,19 +801,16 @@ function SchemeAssist() {
       .filter(msg => msg.role === 'bot')
       .map(msg => msg.text);
 
-    // Speak each new message in sequence
+    // Queue each new message; browser TTS will play them sequentially.
     if (newBotMessages.length > 0) {
-      let delayMs = 0;
-      newBotMessages.forEach((text, idx) => {
-        setTimeout(() => speakText(text), delayMs);
-        // Queue each message with a small delay to ensure proper sequencing
-        delayMs += Math.max(500, (text.length / 10) * 100); // Base delay + text length
+      newBotMessages.forEach((text) => {
+        speakText(text, { speed: speechRate, forceRestart: false });
       });
 
       // Update the index of the last spoken message
       spokenMessagesIndexRef.current = messages.length - 1;
     }
-  }, [messages, textToSpeechEnabled, speakText]);
+  }, [messages, textToSpeechEnabled, speakText, speechRate]);
 
   // Fetch scheme data on mount (do NOT create application draft yet)
   useEffect(() => {
@@ -814,6 +844,7 @@ function SchemeAssist() {
           // Restore the original chat messages if available
           if (submittedState.messages && submittedState.messages.length > 0) {
             setMessages(submittedState.messages);
+            markLatestBotMessageForReplay(submittedState.messages);
           } else {
             // Fallback: Show submitted message if no history
             const submittedMessages = [
@@ -838,8 +869,7 @@ function SchemeAssist() {
             }
             
             setMessages(submittedMessages);
-                      // Mark all submitted messages as already spoken (to prevent re-speaking)
-                      spokenMessagesIndexRef.current = submittedMessages.length - 1;
+            markLatestBotMessageForReplay(submittedMessages);
           }
           
           setIsLoading(false);
@@ -852,14 +882,18 @@ function SchemeAssist() {
         if (savedState.answers && savedState.step !== null && savedState.messages) {
           // Restore previous session
           const normalizedSavedAnswers = enforceLoggedInAadhaar(savedState.answers || {});
+          const hasUserInputHistory = (savedState.messages || []).some(
+            (message) => message?.role === 'user' && typeof message.text === 'string' && message.text.trim(),
+          );
+
           setCollectedAnswers(normalizedSavedAnswers);
           setCurrentStepIndex(findNextMissingRequiredStep(normalizedSavedAnswers));
-          setHasCapturedIntro(true);
+          // Only skip intro mode when the user has already sent at least one answer before.
+          setHasCapturedIntro(Boolean(hasUserInputHistory));
           setMessages(savedState.messages);
           setChatInput('');
           // Do NOT restore applicationId - it will be created on submission
-                  // Mark all restored messages as already spoken (to prevent re-speaking)
-                  spokenMessagesIndexRef.current = savedState.messages.length - 1;
+          markLatestBotMessageForReplay(savedState.messages);
         } else {
           // Start fresh - just load the scheme, don't create application yet
           setIsLoading(false);
@@ -913,6 +947,10 @@ function SchemeAssist() {
 
   // Initialize speech recognition
   useEffect(() => {
+    latestChatInputRef.current = chatInput;
+  }, [chatInput]);
+
+  useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
@@ -921,6 +959,10 @@ function SchemeAssist() {
       return;
     }
 
+    setIsMicSupported(true);
+    setIsListening(false);
+    setVoiceStatus('Click mic to start speaking');
+
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-IN';
     recognition.interimResults = true;
@@ -928,22 +970,29 @@ function SchemeAssist() {
 
     recognition.onstart = () => {
       setIsListening(true);
+      voiceSessionBaseRef.current = latestChatInputRef.current.trim();
       setVoiceStatus('Listening... speak now');
     };
 
     recognition.onresult = (event) => {
       let transcriptChunk = '';
 
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        transcriptChunk += event.results[index][0].transcript;
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcriptChunk += `${event.results[index][0].transcript} `;
       }
 
-      setChatInput(transcriptChunk.trim());
+      const nextInput = `${voiceSessionBaseRef.current} ${transcriptChunk}`.trim();
+      setChatInput(nextInput);
     };
 
-    recognition.onerror = () => {
-      setVoiceStatus('Could not capture voice. Please try again');
+    recognition.onerror = (event) => {
+      const errorCode = event?.error || 'unknown-error';
+      setVoiceStatus(`Voice input failed (${errorCode}). Please tap mic again`);
       setIsListening(false);
+
+      if (errorCode === 'aborted' || errorCode === 'network' || errorCode === 'audio-capture') {
+        setSpeechSessionKey((prev) => prev + 1);
+      }
     };
 
     recognition.onend = () => {
@@ -954,21 +1003,14 @@ function SchemeAssist() {
     recognitionRef.current = recognition;
 
     return () => {
-      recognition.stop();
+      try {
+        recognition.stop();
+      } catch (err) {
+        console.warn('Voice cleanup stop failed:', err);
+      }
       recognitionRef.current = null;
     };
-  }, []);
-
-  const handleMicClick = () => {
-    if (!recognitionRef.current) return;
-
-    if (isListening) {
-      recognitionRef.current.stop();
-      return;
-    }
-
-    recognitionRef.current.start();
-  };
+  }, [speechSessionKey]);
 
   const handleSend = async () => {
     if (hasSubmitted) return;
@@ -1107,6 +1149,8 @@ function SchemeAssist() {
             .join('\n')
         : '';
 
+      const aadhaarAcceptedText = buildAadhaarAcceptedMessage();
+
       if (nextStepIndex < requiredGuidedFields.length) {
         const { stepNumber, totalSteps } = getQuestionProgress(nextStepIndex, updatedAnswers);
         const nextQuestion = buildQuestion(
@@ -1118,9 +1162,13 @@ function SchemeAssist() {
           ? `Thanks! I captured these details from your introduction:\n${capturedFieldsText}\n\nNow I only need the missing required details.`
           : 'Thanks for the introduction. I could not capture required fields yet, so I will ask only the missing required details now.';
 
+        const introWithAadhaar = aadhaarAcceptedText
+          ? `${introResponse}\n\n${aadhaarAcceptedText}`
+          : introResponse;
+
         const introMessages = [
           ...nextMessages,
-          { role: 'bot', text: introResponse },
+          { role: 'bot', text: introWithAadhaar },
           { role: 'bot', text: nextQuestion },
         ];
 
@@ -1134,7 +1182,7 @@ function SchemeAssist() {
         (field) => `• ${field.label}: ${updatedAnswers[field.name] || '-'}`,
       );
 
-      const summaryText = `Great, I have collected all required inputs for ${schemeData.schemeName} from your introduction.\n\nSummary:\n${summaryLines.join('\n')}\n\nClick Submit Application to finalize your application.`;
+      const summaryText = `Great, I have collected all required inputs for ${schemeData.schemeName} from your introduction.\n\n${aadhaarAcceptedText ? `${aadhaarAcceptedText}\n\n` : ''}Summary:\n${summaryLines.join('\n')}\n\nClick Submit Application to finalize your application.`;
       const introCompleteMessages = [
         ...nextMessages,
         { role: 'bot', text: summaryText },
@@ -1220,6 +1268,22 @@ function SchemeAssist() {
     }
   };
 
+  const stopVoiceInput = useCallback(() => {
+    if (!recognitionRef.current) {
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      recognitionRef.current.stop();
+    } catch (err) {
+      console.warn('Voice stop failed:', err);
+    }
+
+    setIsListening(false);
+    setVoiceStatus('Click mic to start speaking');
+  }, []);
+
   const handleResetForm = () => {
     const confirmMsg = hasSubmitted 
       ? 'Are you sure you want to submit another form? This will start a new application.'
@@ -1227,6 +1291,9 @@ function SchemeAssist() {
       
     if (window.confirm(confirmMsg)) {
       const resetFormState = () => {
+        stopVoiceInput();
+        setSpeechSessionKey((prev) => prev + 1);
+
         // Clear all state
         setCurrentStepIndex(0);
         setCollectedAnswers(enforceLoggedInAadhaar({}));
@@ -1243,18 +1310,42 @@ function SchemeAssist() {
 
         // Reset messages to initial greeting
         if (requiredGuidedFields.length > 0) {
-          setMessages([
+          const resetGreetingMessages = [
             {
               role: 'bot',
               text: `Hi, I will help you complete your ${schemeData.schemeName} application. Please introduce yourself in one message and include as many required details as you can.`,
             },
-          ]);
+          ];
+          setMessages(resetGreetingMessages);
+          markLatestBotMessageForReplay(resetGreetingMessages);
         }
 
         setHasCapturedIntro(false);
       };
 
       resetFormState();
+    }
+  };
+
+  const handleMicClick = () => {
+    if (!recognitionRef.current) {
+      setVoiceStatus('Reinitializing voice input. Please try again');
+      setSpeechSessionKey((prev) => prev + 1);
+      return;
+    }
+
+    if (isListening) {
+      stopVoiceInput();
+      return;
+    }
+
+    try {
+      recognitionRef.current.start();
+    } catch (err) {
+      console.warn('Voice start failed:', err);
+      setVoiceStatus('Mic was busy. Reinitializing voice input');
+      setIsListening(false);
+      setSpeechSessionKey((prev) => prev + 1);
     }
   };
 
