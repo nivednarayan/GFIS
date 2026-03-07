@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "GFIS Form Assistant",
+  "version": "1.0.0",
+  "description": "Assistive form filler using GFIS backend extracted data",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://localhost:5000/*", "https://*/*", "http://*/*"],
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/content.js"]
+    }
+  ]
+}
