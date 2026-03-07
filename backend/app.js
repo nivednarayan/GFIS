@@ -7,6 +7,7 @@ const validationRoutes = require("./routes/validation_routes");
 const schemeRoutes = require("./routes/scheme_routes");
 const applicationRoutes = require("./routes/application_routes");
 const inputRoutes = require("./routes/input_routes");
+const documentRoutes = require("./routes/document_routes");
 const authRoutes = require("./routes/auth_routes");
 
 const app = express();
@@ -20,6 +21,7 @@ app.use("/api", validationRoutes);
 app.use("/api", schemeRoutes);
 app.use("/api", applicationRoutes);
 app.use("/api", inputRoutes);
+app.use("/api", documentRoutes);
 
 // Connect to MongoDB
 mongoose.connect(MONGODB_URI)

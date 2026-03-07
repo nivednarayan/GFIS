@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import AudioRecorder from '../../components/AudioRecorder';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -1388,15 +1389,7 @@ function SchemeAssist() {
         <h2>{schemeData.schemeName}</h2>
         <p>Use voice input to start filling the application quickly.</p>
 
-        <button
-          type="button"
-          className={`mic-button ${isListening ? 'mic-button--active' : ''}`}
-          onClick={handleMicClick}
-          disabled={!isMicSupported}
-        >
-          {isListening ? '⏹ Stop Voice Input' : '🎤 Start Voice Input'}
-        </button>
-        <p className="voice-status">{voiceStatus}</p>
+        <AudioRecorder />
 
         <div className="page-links">
           <Link to="/citizen/apply">Back to Schemes</Link>
