@@ -620,6 +620,60 @@ function SchemeAssist() {
     }
   }, [collectedAnswers, enforceLoggedInAadhaar, findNextMissingRequiredStep]);
 
+  useEffect(() => {
+    if (!applicationId) return;
+
+    try {
+      localStorage.setItem('GFIS_ACTIVE_APPLICATION_ID', applicationId);
+    } catch (err) {
+      
+    }
+  }, [applicationId]);
+
+  const persistLatestAutofillPayload = useCallback(
+    ({ extractedFields = {}, transcript = '', source = 'text', forcedApplicationId = null }) => {
+      if (!extractedFields || typeof extractedFields !== 'object') return;
+      if (Object.keys(extractedFields).length === 0) return;
+
+      let resolvedApplicationId =
+        forcedApplicationId || applicationId || null;
+
+      if (!resolvedApplicationId) {
+        try {
+          resolvedApplicationId = localStorage.getItem('GFIS_ACTIVE_APPLICATION_ID') || null;
+        } catch {
+          resolvedApplicationId = null;
+        }
+      }
+
+      try {
+        localStorage.setItem(
+          'GFIS_LAST_VOICE_PAYLOAD',
+          JSON.stringify({
+            applicationId: resolvedApplicationId,
+            transcript,
+            extractedFields,
+            source,
+            capturedAt: new Date().toISOString(),
+          }),
+        );
+      } catch (err) {
+        console.warn('[SCHEME-ASSIST] Failed to persist extension payload:', err);
+      }
+    },
+    [applicationId],
+  );
+
+  useEffect(() => {
+    if (!collectedAnswers || Object.keys(collectedAnswers).length === 0) return;
+
+    persistLatestAutofillPayload({
+      extractedFields: collectedAnswers,
+      source: 'text',
+      transcript: '',
+    });
+  }, [collectedAnswers, persistLatestAutofillPayload]);
+
   const getQuestionProgress = useCallback(
     (fieldIndex, answers) => {
       const answeredRequiredCount = requiredGuidedFields.reduce((count, field) => {
@@ -648,20 +702,39 @@ function SchemeAssist() {
     const appResponse = await fetch(`${API_BASE_URL}/applications/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ districtId }),
+      body: JSON.stringify({ districtId, schemeId }),
     });
 
+    const appData = await appResponse.json().catch(() => ({}));
+
     if (!appResponse.ok) {
-      throw new Error('Failed to create application');
+      throw new Error(
+        appData?.message || appData?.error || 'Failed to create application draft',
+      );
     }
 
-    const appData = await appResponse.json();
-    const newAppId = appData.applicationId;
+    const newAppId = appData.applicationId || appData?.data?.applicationId;
+    if (!newAppId) {
+      throw new Error('Application draft API did not return an application ID');
+    }
+
     console.log('[APP] Draft created with real UUID:', newAppId);
     setApplicationId(newAppId);
     localStorage.setItem(getStorageKey('appId'), newAppId);
     return newAppId;
   };
+
+  const ensureApplicationId = useCallback(async () => {
+    if (applicationId) return applicationId;
+
+    const savedAppId = localStorage.getItem(getStorageKey('appId'));
+    if (savedAppId) {
+      setApplicationId(savedAppId);
+      return savedAppId;
+    }
+
+    return createApplicationDraft();
+  }, [applicationId, districtId, schemeId]);
 
   const saveStateToLocalStorage = (stepIndex, answers, msgHistory) => {
     try {
@@ -1067,6 +1140,15 @@ function SchemeAssist() {
       setApplicationId((prev) => prev || streamedApplicationId);
     }
 
+    const resolvedApplicationId = streamedApplicationId || applicationId || null;
+
+    persistLatestAutofillPayload({
+      extractedFields: extractedFields || {},
+      transcript,
+      source: 'voice',
+      forcedApplicationId: resolvedApplicationId,
+    });
+
     console.log('[SCHEME-ASSIST] Transcript ready:', {
       transcript,
       extractedFieldsCount: Object.keys(extractedFields || {}).length,
@@ -1101,7 +1183,7 @@ function SchemeAssist() {
         },
       ]);
     }
-  }, [enforceLoggedInAadhaar, findNextMissingRequiredStep]);
+  }, [applicationId, enforceLoggedInAadhaar, findNextMissingRequiredStep, persistLatestAutofillPayload]);
 
   const handleSend = async () => {
     if (hasSubmitted) return;
@@ -1495,6 +1577,7 @@ function SchemeAssist() {
           key={audioRecorderKey}
           applicationId={applicationId}
           districtId={districtId}
+          onEnsureApplicationId={ensureApplicationId}
           onTranscriptReady={handleTranscriptReady}
         />
 

@@ -3,99 +3,140 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GFIS Extension Test Page</title>
+  <title>GFIS Extension 5-Field Test</title>
   <style>
+    * { box-sizing: border-box; }
     body {
       font-family: Arial, sans-serif;
-      max-width: 600px;
-      margin: 50px auto;
-      padding: 20px;
-      background: #f5f5f5;
+      max-width: 920px;
+      margin: 24px auto;
+      padding: 16px;
+      background: #f4f6f8;
+      color: #1f2937;
     }
     .form-container {
-      background: white;
-      padding: 30px;
-      border-radius: 10px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      background: #ffffff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
     }
-    h2 {
-      color: #333;
-      margin-bottom: 20px;
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      color: #1d4ed8;
     }
     .instructions {
-      background: #e3f2fd;
-      padding: 15px;
-      border-radius: 5px;
-      margin-bottom: 20px;
-      border-left: 4px solid #2196F3;
+      background: #e0f2fe;
+      padding: 14px 16px;
+      border-radius: 8px;
+      margin: 0 0 18px;
+      border-left: 4px solid #0284c7;
     }
     .instructions h3 {
-      margin-top: 0;
-      color: #1976D2;
+      margin: 0 0 8px;
+      color: #0c4a6e;
       font-size: 18px;
     }
-    .instructions ol {
-      margin: 10px 0 0 20px;
+    .instructions ul {
+      margin: 0;
+      padding-left: 18px;
     }
     .instructions li {
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+      line-height: 1.35;
     }
-    label {
-      display: inline-block;
-      width: 100px;
-      margin-bottom: 10px;
-      font-weight: bold;
-      color: #555;
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(280px, 1fr));
+      gap: 14px 20px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .field label {
+      font-size: 14px;
+      font-weight: 700;
+      color: #334155;
     }
     input {
-      padding: 8px;
-      border: 2px solid #ddd;
-      border-radius: 4px;
-      width: 250px;
-      font-size: 16px;
+      width: 100%;
+      padding: 10px;
+      border: 2px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #fff;
     }
     input:focus {
       outline: none;
-      border-color: #4CAF50;
+      border-color: #2563eb;
+    }
+    .actions {
+      margin-top: 24px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
     }
     button {
-      margin-top: 20px;
-      padding: 10px 30px;
-      background: #4CAF50;
-      color: white;
+      padding: 10px 18px;
       border: none;
-      border-radius: 5px;
-      font-size: 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
       cursor: pointer;
     }
-    button:hover {
-      background: #45a049;
+    .submit-btn { background: #16a34a; color: #fff; }
+    .reset-btn { background: #e5e7eb; color: #111827; }
+    .hint {
+      margin-top: 14px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    code {
+      background: #eef2ff;
+      border-radius: 4px;
+      padding: 2px 6px;
+    }
+    @media (max-width: 760px) {
+      .grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="form-container">
-    <div class="instructions">
-      <h3>🧪 GFIS Extension Test Instructions:</h3>
-      <ol>
-        <li>Backend is running on port 5000 ✅</li>
-        <li>Open <strong>chrome://extensions/</strong> in Chrome</li>
-        <li>Enable "Developer mode"</li>
-        <li>Click "Load unpacked" → Select <code>GFIS/browser_extension</code> folder</li>
-        <li>Click the GFIS extension icon and press "Fill Form"</li>
-        <li>Watch the fields below auto-fill! ✨</li>
-      </ol>
+    <h1>GFIS Extension – 5 Field Test</h1>
+    <div class="grid">
+      <div class="field">
+        <label for="full_name">Full Name</label>
+        <input type="text" id="full_name" name="full name" placeholder="Enter full name">
+      </div>
+      <div class="field">
+        <label for="aadhaar_number">Aadhaar Number</label>
+        <input type="text" id="aadhaar_number" name="aadhaar number" placeholder="12-digit Aadhaar number">
+      </div>
+      <div class="field">
+        <label for="age_years">Age</label>
+        <input type="number" id="age_years" name="age" min="0" placeholder="Enter age">
+      </div>
+      <div class="field">
+        <label for="marital_status">Marital Status</label>
+        <input type="text" id="marital_status" name="marital status" placeholder="Single / Married / Widowed / Divorced">
+      </div>
+      <div class="field">
+        <label for="annual_income">Annual Income</label>
+        <input type="number" id="annual_income" name="annual income" min="0" placeholder="Enter annual income">
+      </div>
     </div>
 
-    <h2>Old Age Pension Application</h2>
+    <div class="actions">
+      <button type="button" class="submit-btn">Submit (Demo)</button>
+      <button type="reset" class="reset-btn">Reset Form</button>
+    </div>
 
-    <label>Name:</label>
-    <input type="text" name="name" id="name"><br><br>
-
-    <label>Age:</label>
-    <input type="number" name="age" id="age"><br><br>
-
-    <button type="button">Submit</button>
+    <p class="hint">
+      This page contains only the 5 requested fields for focused testing.
+    </p>
   </div>
 </body>
-</html>     
+</html>

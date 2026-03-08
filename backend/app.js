@@ -3,7 +3,11 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-require("dotenv").config();
+const path = require("path");
+const dotenv = require("dotenv");
+
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 // Routes
 const validationRoutes = require("./routes/validation_routes");

@@ -3,7 +3,7 @@
   "name": "GFIS Form Assistant",
   "version": "1.0.0",
   "description": "Assistive form filler using GFIS backend extracted data",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["http://localhost:5000/*", "https://*/*", "http://*/*"],
   "action": {
     "default_popup": "popup/popup.html"

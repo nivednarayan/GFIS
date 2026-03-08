@@ -3,10 +3,14 @@ import api from '../services/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-export default function AudioRecorder({ applicationId, districtId = "district-001", onTranscriptReady }) {
+export default function AudioRecorder({
+  applicationId,
+  districtId = "district-001",
+  onTranscriptReady,
+  onEnsureApplicationId,
+}) {
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [fileKey, setFileKey] = useState('');
   const [error, setError] = useState('');
   const [isPolling, setIsPolling] = useState(false);
   const [processingStatus, setProcessingStatus] = useState(null);
@@ -112,7 +116,6 @@ export default function AudioRecorder({ applicationId, districtId = "district-00
 
   const startRecording = async () => {
     setError('');
-    setFileKey('');
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -144,8 +147,19 @@ export default function AudioRecorder({ applicationId, districtId = "district-00
       try {
         setIsUploading(true);
 
-        if (!applicationId) {
-          setError('Application ID is missing. Please wait a moment and try recording again.');
+        let finalApplicationId = applicationId;
+
+        if (!finalApplicationId && typeof onEnsureApplicationId === 'function') {
+          try {
+            finalApplicationId = await onEnsureApplicationId();
+          } catch (idError) {
+            setError(idError?.message || 'Could not create application draft. Please try again.');
+            return;
+          }
+        }
+
+        if (!finalApplicationId) {
+          setError('Application draft is not ready. Please wait and try recording again.');
           return;
         }
 
@@ -153,8 +167,7 @@ export default function AudioRecorder({ applicationId, districtId = "district-00
           type: 'audio/wav',
         });
 
-        const { fileKey: uploadedFileKey } = await api.uploadAudioFile(audioBlob, applicationId);
-        setFileKey(uploadedFileKey);
+        await api.uploadAudioFile(audioBlob, finalApplicationId);
 
         /**
          * ============================================================
@@ -171,11 +184,11 @@ export default function AudioRecorder({ applicationId, districtId = "district-00
          * - Make available to chat UI for auto-population
          * ============================================================
          */
-        console.log(`[AUDIO-RECORDER] Audio uploaded successfully. FileKey: ${uploadedFileKey}`);
+        console.log('[AUDIO-RECORDER] Audio uploaded successfully.');
 
         // Record upload time as a secondary guard for the legacy fallback path.
         const uploadedAt = new Date().toISOString();
-        startPollingAudioResult(applicationId, uploadedAt);
+        startPollingAudioResult(finalApplicationId, uploadedAt);
       } catch (uploadError) {
         setError(uploadError.message || 'Upload failed.');
       } finally {
@@ -214,12 +227,6 @@ export default function AudioRecorder({ applicationId, districtId = "district-00
             Status: <strong>{processingStatus || 'waiting'}</strong>
           </p>
         </div>
-      )}
-
-      {fileKey && !isPolling && (
-        <p style={{ marginTop: '0.5rem' }}>
-          Upload successful. File key: <strong>{fileKey}</strong>
-        </p>
       )}
 
       {transcription && (
