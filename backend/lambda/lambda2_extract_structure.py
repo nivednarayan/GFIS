@@ -4,20 +4,9 @@ Lambda 2 — Transcribe Output JSON → Bedrock Field Extraction → DynamoDB ST
 Trigger : S3 PutObject on "gfis-s3-78",
           prefix "district-001/transcribe-output/"
 
-What it does:
-    1. Recovers applicationId from the Transcribe output filename.
-       Lambda 1 wrote:  gfis-{unix_ts}-{safe_app_id}.json
-       Recovery:        re.sub(r'^gfis-\\d+-', '', stem)  → original applicationId
-    2. Reads transcript text from the Transcribe output JSON.
-    3. Calls Bedrock Nova Lite to extract structured fields.
-    4. update_item (NOT put_item) → writes Transcript, aiAnalysis,
-       ApplicationStatus = "STRUCTURED"
-       This DynamoDB change fires Lambda 3 via DynamoDB Streams.
-
-CRITICAL — never call put_item here:
-    The record was created by /api/applications/create (frontend draft).
-    put_item would create a second record under a new UUID, the frontend
-    would keep polling the original draft and loop forever on "processing…".
+UPDATES:
+  - FIX: Aligned JSON keys with Frontend expected field names (mobileNumber, aadhaarNumber).
+  - KEEPS: Read-Merge-Write logic and Age 0 fix.
 """
 
 import json
@@ -45,73 +34,74 @@ def lambda_handler(event, context):
     bucket = record["s3"]["bucket"]["name"]
     key    = urllib.parse.unquote_plus(record["s3"]["object"]["key"])
 
-    print(f"Transcribe output file: {key}")
-
     # ── 2. Recover applicationId from the filename ───────────────────────────────────
-    #
-    # Filename: district-001/transcribe-output/gfis-{timestamp}-{safe_app_id}.json
-    #
-    # WRONG (old approach):
-    #   re.search(r'(APP-[A-Z0-9-]+)', key)
-    #   → only matches legacy APP-* IDs; UUID stems will NEVER match
-    #   → returns 400 for every real application
-    #
-    # CORRECT:
-    #   strip ".json", strip the "gfis-{digits}-" prefix → original applicationId
-    stem           = key.split("/")[-1].replace(".json", "")   # "gfis-1741234567-abc123-..."
-    application_id = re.sub(r"^gfis-\d+-", "", stem)           # "abc123-..."  (UUID)
-    district_id    = key.split("/")[0]                          # "district-001"
+    stem           = key.split("/")[-1].replace(".json", "")
+    application_id = re.sub(r"^gfis-\d+-", "", stem)
+    district_id    = key.split("/")[0]
 
     if not application_id or application_id == stem:
-        # stem didn't start with gfis-{digits}- → not our file, skip safely
-        print(f"Could not recover applicationId from: {key} — skipping")
+        print(f"Skipping invalid key: {key}")
         return {"statusCode": 200}
 
-    print(f"Recovered ApplicationID: {application_id} | DistrictID: {district_id}")
-
-    # ── 3. Read transcript from Transcribe output JSON ───────────────────────────────
+    # ── 3. Read NEW transcript text ──────────────────────────────────────────────────
     response        = s3.get_object(Bucket=bucket, Key=key)
     transcript_json = json.loads(response["Body"].read())
 
     try:
-        transcript_text = transcript_json["results"]["transcripts"][0]["transcript"]
+        new_transcript_text = transcript_json["results"]["transcripts"][0]["transcript"]
     except (KeyError, IndexError):
-        transcript_text = ""
+        new_transcript_text = ""
 
-    if not transcript_text.strip():
-        print("Empty transcript — marking as failed")
-        table.update_item(
-            Key={"DistrictID": district_id, "ApplicationID": application_id},
-            UpdateExpression="SET ApplicationStatus = :s, updatedAt = :u",
-            ExpressionAttributeValues={
-                ":s": "failed",
-                ":u": datetime.now(timezone.utc).isoformat(),
-            },
-        )
+    if not new_transcript_text.strip():
+        print("Empty transcript — no update needed")
         return {"statusCode": 200}
 
-    print(f"Transcript: {transcript_text}")
+    print(f"New Transcript: {new_transcript_text}")
 
-    # ── 4. Bedrock: extract structured fields ────────────────────────────────────────
-    prompt = f"""You are extracting structured information from a rural welfare application.
+    # ── 4. FETCH HISTORY (Context Separation) ────────────────────────────────────────
+    try:
+        existing_record = table.get_item(
+            Key={"DistrictID": district_id, "ApplicationID": application_id}
+        )
+        item = existing_record.get("Item", {})
+        current_ai_analysis = item.get("aiAnalysis", {})
+        history_context = item.get("TranscriptHistory", item.get("Transcript", ""))
+        
+    except Exception as e:
+        print(f"Error fetching record: {e}")
+        current_ai_analysis = {}
+        history_context = ""
 
-Transcript: {transcript_text}
+    separator = " " if history_context else ""
+    full_conversation_context = f"{history_context}{separator}{new_transcript_text}"
 
-Return ONLY valid JSON with no extra text before or after:
+    # ── 5. Bedrock Prompt (Updated Keys for Frontend Compatibility) ──────────────────
+    prompt = f"""You are a helpful AI filling a government application form. 
+    
+History of conversation: "{full_conversation_context}"
+
+Task: Extract structured data based on the history, focusing on the latest update.
+
+Return ONLY JSON.
+1. If a field is NOT mentioned or implied, return null. 
+2. For 'age', return 0 only if explicitly stated as 0.
+3. Generate a 'chat_response': A short, friendly phrase confirming ONLY what was just updated.
 
 {{
-  "name": "person name or null",
+  "fullName": "person name or null",
   "age": 0,
-  "scheme": "government scheme mentioned, or closest real scheme, or null",
-  "district": "district if mentioned or null",
-  "occupation": "occupation if mentioned or null",
-  "incomeLevel": "low, medium, high, or unknown",
-  "address": "address if mentioned or null",
-  "phoneNumber": "phone number if mentioned or null",
-  "applicationDate": "YYYY-MM-DD"
-}}
-
-Use null for missing fields. Use 0 for unknown age."""
+  "scheme": "scheme name or null",
+  "district": "district or null",
+  "occupation": "occupation or null",
+  "income": "annual income or null",
+  "address": "address or null",
+  "mobileNumber": "phone number (10 digits) or null",
+  "aadhaarNumber": "aadhaar number (12 digits) or null",
+  "rationCardNumber": "ration card number or null",
+  "dateOfBirth": "YYYY-MM-DD or null",
+  "applicationDate": "YYYY-MM-DD",
+  "chat_response": "Short confirmation message"
+}}"""
 
     bedrock_response = bedrock.converse(
         modelId=MODEL_ID,
@@ -119,31 +109,40 @@ Use null for missing fields. Use 0 for unknown age."""
         inferenceConfig={"maxTokens": 500, "temperature": 0},
     )
 
-    model_output  = bedrock_response["output"]["message"]["content"][0]["text"]
-    json_match    = re.search(r"\{.*?\}", model_output, re.DOTALL)
-    structured_data = json.loads(json_match.group(0)) if json_match else {}
+    model_output = bedrock_response["output"]["message"]["content"][0]["text"]
+    json_match   = re.search(r"\{.*?\}", model_output, re.DOTALL)
+    new_extracted_data = json.loads(json_match.group(0)) if json_match else {}
 
-    print(f"Extracted fields: {structured_data}")
+    print(f"Newly Extracted: {new_extracted_data}")
 
-    # ── 5. Update existing draft record — set status to STRUCTURED ───────────────────
-    # "STRUCTURED" triggers Lambda 3 via DynamoDB Streams.
-    # Lambda 3 runs Bedrock risk analysis and sets the final status "ANALYZED",
-    # which is what the frontend /audio-result polling endpoint waits for.
+    # ── 6. MERGE LOGIC (Fixing the 0 Bug) ────────────────────────────────────────────
+    final_merged_data = current_ai_analysis.copy()
+    chat_response_text = new_extracted_data.pop("chat_response", "Updated details.")
+
+    for field, value in new_extracted_data.items():
+        # Ignore nulls, empty strings, and 0 (to protect age)
+        if value is not None and value != "null" and value != "" and value != 0:
+            final_merged_data[field] = value
+
+    # ── 7. Update DynamoDB ───────────────────────────────────────────────────────────
     table.update_item(
         Key={"DistrictID": district_id, "ApplicationID": application_id},
         UpdateExpression=(
             "SET aiAnalysis = :ai, "
-            "    Transcript = :tx, "
+            "    Transcript = :tx, "         
+            "    TranscriptHistory = :th, " 
+            "    chatResponse = :cr, "       
             "    ApplicationStatus = :st, "
             "    updatedAt = :ts"
         ),
         ExpressionAttributeValues={
-            ":ai": structured_data,
-            ":tx": transcript_text,
-            ":st": "STRUCTURED",  # ← triggers Lambda 3 via DynamoDB Streams
+            ":ai": final_merged_data,
+            ":tx": new_transcript_text,        
+            ":th": full_conversation_context,  
+            ":cr": chat_response_text,
+            ":st": "STRUCTURED",
             ":ts": datetime.now(timezone.utc).isoformat(),
         },
     )
 
-    print(f"Updated {application_id} → STRUCTURED. Lambda 3 will now trigger.")
-    return {"statusCode": 200}
+    return {"statusCode": 200} 

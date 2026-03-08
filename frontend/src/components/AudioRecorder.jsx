@@ -32,8 +32,8 @@ export default function AudioRecorder({ applicationId, districtId = "district-00
    * for any ANALYZED record. The `uploadedAt` ISO timestamp is passed as `since` so
    * stale results from previous sessions are filtered out.
    */
-  const startPollingAudioResult = (uploadedAt) => {
-    console.log(`[AUDIO-RECORDER] Starting to poll for ANALYZED record since: ${uploadedAt}`);
+  const startPollingAudioResult = (appId, uploadedAt) => {
+    console.log(`[AUDIO-RECORDER] Starting to poll for ApplicationID: ${appId} since: ${uploadedAt}`);
     setIsPolling(true);
     setProcessingStatus('processing');
     setTranscription(null);
@@ -41,8 +41,11 @@ export default function AudioRecorder({ applicationId, districtId = "district-00
 
     const pollInterval = setInterval(async () => {
       try {
+        // Primary: direct lookup by applicationId — backend does GetCommand(applicationId),
+        // which always returns exactly this record and nothing else.
+        // since is kept as a secondary guard for the legacy fallback path.
         const response = await fetch(
-          `${API_BASE_URL}/audio-result?since=${encodeURIComponent(uploadedAt)}`,
+          `${API_BASE_URL}/audio-result?applicationId=${encodeURIComponent(appId)}&since=${encodeURIComponent(uploadedAt)}`,
         );
 
         const text = await response.text();
@@ -170,10 +173,9 @@ export default function AudioRecorder({ applicationId, districtId = "district-00
          */
         console.log(`[AUDIO-RECORDER] Audio uploaded successfully. FileKey: ${uploadedFileKey}`);
 
-        // Record upload time so the backend can exclude stale ANALYZED rows
-        // from previous sessions.
+        // Record upload time as a secondary guard for the legacy fallback path.
         const uploadedAt = new Date().toISOString();
-        startPollingAudioResult(uploadedAt);
+        startPollingAudioResult(applicationId, uploadedAt);
       } catch (uploadError) {
         setError(uploadError.message || 'Upload failed.');
       } finally {

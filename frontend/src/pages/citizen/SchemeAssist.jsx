@@ -541,6 +541,8 @@ function SchemeAssist() {
   const [lastBotMessage, setLastBotMessage] = useState('');
   const [isSpeechPaused, setIsSpeechPaused] = useState(false);
   const [speechSessionKey, setSpeechSessionKey] = useState(0);
+  // Incrementing this key forces AudioRecorder to fully remount, killing any active polling interval.
+  const [audioRecorderKey, setAudioRecorderKey] = useState(0);
 
   const districtId = useMemo(
     () => user?.districtId || user?.district || 'district-001',
@@ -1379,9 +1381,14 @@ function SchemeAssist() {
       : 'Are you sure you want to reset the form? All entered data will be lost.';
       
     if (window.confirm(confirmMsg)) {
-      const resetFormState = () => {
+      const resetFormState = async () => {
         stopVoiceInput();
         setSpeechSessionKey((prev) => prev + 1);
+
+        // Force-remount AudioRecorder — this destroys its setInterval immediately.
+        // Without this, the component keeps polling the old applicationId and DynamoDB
+        // returns the stale ANALYZED record, which re-fills the form automatically.
+        setAudioRecorderKey((prev) => prev + 1);
 
         // Clear all state
         setCurrentStepIndex(0);
@@ -1390,12 +1397,19 @@ function SchemeAssist() {
         setHasSubmitted(false);
         setSubmittedData(null);
 
-        // Clear localStorage completely
+        // Clear localStorage (removes old applicationId so it is not restored on next load)
         clearStateFromLocalStorage();
-        setApplicationId(null);
 
-        // Do NOT create a new application draft - it will be created only on actual submission
-        // This prevents unwanted entries in the database for abandoned forms
+        // Create a fresh DynamoDB draft right now.
+        // setApplicationId(null) alone would leave the next recording without a UUID until
+        // the first Submit — createApplicationDraft() gives the new AudioRecorder a clean
+        // record to write into from the start.
+        try {
+          await createApplicationDraft();
+        } catch (err) {
+          console.warn('[RESET] Could not pre-create new draft:', err);
+          setApplicationId(null);
+        }
 
         // Reset messages to initial greeting
         if (requiredGuidedFields.length > 0) {
@@ -1478,6 +1492,7 @@ function SchemeAssist() {
         <p>Use voice input to start filling the application quickly.</p>
 
         <AudioRecorder
+          key={audioRecorderKey}
           applicationId={applicationId}
           districtId={districtId}
           onTranscriptReady={handleTranscriptReady}

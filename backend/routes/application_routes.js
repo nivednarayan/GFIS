@@ -554,17 +554,55 @@ router.delete("/applications/cleanup/draft", async (req, res) => {
   }
 });
 
-// GET /api/audio-result - Returns the newest ANALYZED record written by Lambda.
-// Deliberately ignores draft rows - only cares about records where ApplicationStatus = "ANALYZED".
+// GET /api/audio-result - Returns the processing result for a specific application.
 // Query Parameters:
-//   districtId (string, optional) - Partition key (default: district-001)
-//   since      (string, optional) - ISO timestamp; restricts results to records processed after this time.
-//                                   Pass the client-side upload time so stale previous-session rows are excluded.
+//   applicationId (string, recommended) - ApplicationID (UUID). When supplied the endpoint does a
+//                                         direct O(1) GetCommand lookup — exact, no timestamp guessing.
+//   districtId    (string, optional)    - Partition key (default: district-001)
+//   since         (string, optional)    - ISO timestamp fallback filter when applicationId is absent.
 router.get("/audio-result", async (req, res) => {
   try {
-    const { districtId = "district-001", since } = req.query;
+    const { districtId = "district-001", applicationId, since } = req.query;
 
-    console.log(`[AUDIO-RESULT] Querying for ANALYZED records in district: ${districtId}${since ? `, since: ${since}` : ""}`);
+    // ── Fast path: applicationId known → direct GetCommand (O(1), always exact) ────────
+    // This is the primary path. The since-based scan below is only a legacy fallback.
+    if (applicationId) {
+      console.log(`[AUDIO-RESULT] Direct lookup for ApplicationID: ${applicationId}`);
+
+      const getResult = await docClient.send(
+        new GetCommand({
+          TableName: process.env.DYNAMODB_TABLE || "GFIS_Applications",
+          Key: { DistrictID: districtId, ApplicationID: applicationId },
+        })
+      );
+
+      const item = getResult.Item;
+
+      if (!item || item.ApplicationStatus !== "ANALYZED") {
+        return res.json({
+          success: true,
+          processingStatus: item?.ApplicationStatus || "processing",
+          transcription: null,
+          extractedFields: {},
+        });
+      }
+
+      return res.json({
+        success: true,
+        applicationId: item.ApplicationID,
+        processingStatus: "ANALYZED",
+        transcription: item.Transcript || item.transcript || item.transcription || null,
+        extractedFields: item.aiAnalysis || item.extractedFields || {},
+        confidence: item.confidence || null,
+        riskLevel: item.riskLevel || null,
+        riskScore: item.RiskScore || null,
+        processedAt: item.processedAt || item.updatedAt || item.CreatedAt || null,
+      });
+    }
+
+    // ── Fallback: no applicationId supplied → scan the partition (legacy behaviour) ────
+
+    console.log(`[AUDIO-RESULT] Fallback scan for ANALYZED records in district: ${districtId}${since ? `, since: ${since}` : ""}`);
 
     // Query the partition, newest first, looking only for ANALYZED records.
     const command = new QueryCommand({
