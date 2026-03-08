@@ -1,0 +1,20 @@
+{
+  "name": "gfis-audio-processor-lambda",
+  "version": "1.0.0",
+  "description": "AWS Lambda function for processing audio uploads - transcription and field extraction",
+  "main": "audioProcessorLambda.js",
+  "scripts": {
+    "package": "zip -r lambda-deployment.zip audioProcessorLambda.js extractFields.js package.json node_modules/"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0",
+    "@aws-sdk/client-transcribe": "^3.0.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

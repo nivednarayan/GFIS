@@ -5,8 +5,8 @@ const api = {
 	 * Step 1: Request a pre-signed upload URL from backend
 	 * GET /api/upload-url
 	 */
-	getUploadUrl: async () => {
-		const response = await fetch(`${API_BASE_URL}/upload-url`, {
+	getUploadUrl: async (applicationId) => {
+		const response = await fetch(`${API_BASE_URL}/upload-url?applicationId=${encodeURIComponent(applicationId)}`, {
 			method: "GET",
 		});
 
@@ -48,8 +48,8 @@ const api = {
 	/**
 	 * Convenience helper: request URL + upload file
 	 */
-	uploadAudioFile: async (audioFile) => {
-		const { uploadUrl, fileKey } = await api.getUploadUrl();
+	uploadAudioFile: async (audioFile, applicationId) => {
+		const { uploadUrl, fileKey } = await api.getUploadUrl(applicationId);
 		await api.uploadToS3(uploadUrl, audioFile);
 
 		return {

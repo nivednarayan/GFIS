@@ -541,6 +541,12 @@ function SchemeAssist() {
   const [lastBotMessage, setLastBotMessage] = useState('');
   const [isSpeechPaused, setIsSpeechPaused] = useState(false);
   const [speechSessionKey, setSpeechSessionKey] = useState(0);
+
+  const districtId = useMemo(
+    () => user?.districtId || user?.district || 'district-001',
+    [user],
+  );
+
   const guidedFields = useMemo(() => (schemeData ? buildGuidedFields(schemeData) : []), [schemeData]);
   const requiredGuidedFields = useMemo(
     () => guidedFields.filter((field) => field.required),
@@ -637,10 +643,10 @@ function SchemeAssist() {
   const getStorageKey = (suffix) => `scheme_assist_${schemeId}_${suffix}`;
 
   const createApplicationDraft = async () => {
-    const appResponse = await fetch(`${API_BASE_URL}/applications`, {
+    const appResponse = await fetch(`${API_BASE_URL}/applications/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ schemeId }),
+      body: JSON.stringify({ districtId }),
     });
 
     if (!appResponse.ok) {
@@ -648,7 +654,8 @@ function SchemeAssist() {
     }
 
     const appData = await appResponse.json();
-    const newAppId = appData.data.applicationId;
+    const newAppId = appData.applicationId;
+    console.log('[APP] Draft created with real UUID:', newAppId);
     setApplicationId(newAppId);
     localStorage.setItem(getStorageKey('appId'), newAppId);
     return newAppId;
@@ -813,7 +820,7 @@ function SchemeAssist() {
     }
   }, [messages, textToSpeechEnabled, speakText, speechRate]);
 
-  // Fetch scheme data on mount (do NOT create application draft yet)
+  // Fetch scheme data on mount and ensure a draft application exists
   useEffect(() => {
     // Guard against React.StrictMode double initialization in development
     if (initializationRef.current) return;
@@ -879,6 +886,7 @@ function SchemeAssist() {
 
         // Check if there's existing state in localStorage (draft)
         const savedState = getStateFromLocalStorage();
+        const savedAppId = localStorage.getItem(getStorageKey('appId'));
 
         if (savedState.answers && savedState.step !== null && savedState.messages) {
           // Restore previous session
@@ -893,11 +901,27 @@ function SchemeAssist() {
           setHasCapturedIntro(Boolean(hasUserInputHistory));
           setMessages(savedState.messages);
           setChatInput('');
-          // Do NOT restore applicationId - it will be created on submission
+          if (savedAppId) {
+            setApplicationId(savedAppId);
+          } else {
+            try {
+              await createApplicationDraft();
+            } catch (draftError) {
+              console.error('Failed to auto-create application draft for restored session:', draftError);
+            }
+          }
           markLatestBotMessageForReplay(savedState.messages);
         } else {
-          // Start fresh - just load the scheme, don't create application yet
-          setIsLoading(false);
+          // Start fresh - create draft immediately so audio polling can use applicationId
+          if (savedAppId) {
+            setApplicationId(savedAppId);
+          } else {
+            try {
+              await createApplicationDraft();
+            } catch (draftError) {
+              console.error('Failed to auto-create application draft:', draftError);
+            }
+          }
         }
 
         setIsLoading(false);
@@ -1012,6 +1036,70 @@ function SchemeAssist() {
       recognitionRef.current = null;
     };
   }, [speechSessionKey]);
+
+  /**
+   * Handle audio transcription result from AudioRecorder component
+   * 
+   * When transcription completes:
+   * - Append transcript as a user message to chat
+   * - Auto-populate collectedAnswers with extracted fields
+   * - Show detected fields in UI
+   * 
+   * Example:
+   * User records: "My name is Ashar, my Aadhaar is 1234567890123"
+   * 
+   * Chat displays:
+   * User: My name is Ashar, my Aadhaar is 1234567890123
+   * 
+   * Auto-filled fields:
+   * ✔ fullName: Ashar
+   * ✔ aadhaarNumber: 1234567890123
+   */
+  const handleTranscriptReady = useCallback((transcript, extractedFields, streamedApplicationId) => {
+    if (!transcript) {
+      console.warn('[SCHEME-ASSIST] Empty transcript received');
+      return;
+    }
+
+    if (streamedApplicationId) {
+      setApplicationId((prev) => prev || streamedApplicationId);
+    }
+
+    console.log('[SCHEME-ASSIST] Transcript ready:', {
+      transcript,
+      extractedFieldsCount: Object.keys(extractedFields || {}).length,
+      extractedFields,
+      streamedApplicationId,
+    });
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'user',
+        text: `📝 From your audio: "${transcript}"`,
+      },
+    ]);
+
+    if (extractedFields && typeof extractedFields === 'object' && Object.keys(extractedFields).length > 0) {
+      setCollectedAnswers((prev) => {
+        const updated = enforceLoggedInAadhaar({
+          ...prev,
+          ...extractedFields,
+        });
+        setCurrentStepIndex(findNextMissingRequiredStep(updated));
+        return updated;
+      });
+
+      const detectedCount = Object.keys(extractedFields).length;
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'bot',
+          text: `✨ Detected ${detectedCount} field(s) from your audio. Continuing to fill remaining fields...`,
+        },
+      ]);
+    }
+  }, [enforceLoggedInAadhaar, findNextMissingRequiredStep]);
 
   const handleSend = async () => {
     if (hasSubmitted) return;
@@ -1389,7 +1477,11 @@ function SchemeAssist() {
         <h2>{schemeData.schemeName}</h2>
         <p>Use voice input to start filling the application quickly.</p>
 
-        <AudioRecorder />
+        <AudioRecorder
+          applicationId={applicationId}
+          districtId={districtId}
+          onTranscriptReady={handleTranscriptReady}
+        />
 
         <div className="page-links">
           <Link to="/citizen/apply">Back to Schemes</Link>

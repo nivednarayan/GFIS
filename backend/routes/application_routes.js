@@ -4,9 +4,12 @@ const Application = require("../models/application");
 const UserInput = require("../models/user_input");
 const DocumentData = require("../models/document_data");
 const { assessApplicationRisk } = require("../services/riskAssessmentService");
+const { GetCommand, PutCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+const { docClient } = require("../services/dynamoService");
 const fs = require("fs");
 const path = require("path");
 const mongoose = require("mongoose");
+const { v4: uuidv4 } = require("uuid");
 
 const findApplicationByIdentifier = async (identifier) => {
   const orFilters = [{ applicationId: identifier }];
@@ -37,7 +40,46 @@ const loadScheme = (schemeId) => {
   }
 };
 
-// POST /api/applications - Create a new application draft
+// POST /api/applications/create - Create a new application draft with real UUID
+router.post("/applications/create", async (req, res) => {
+  try {
+    const { districtId = "district-001" } = req.body;
+
+    // Generate real UUID ApplicationID
+    const applicationId = uuidv4();
+
+    // Create draft record in DynamoDB
+    await docClient.send(
+      new PutCommand({
+        TableName: process.env.DYNAMODB_TABLE || "GFIS_Applications",
+        Item: {
+          DistrictID: districtId,
+          ApplicationID: applicationId,
+          processingStatus: "draft",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      })
+    );
+
+    console.log(`[CREATE-DRAFT] Created draft with ApplicationID: ${applicationId}`);
+
+    return res.json({
+      success: true,
+      applicationId,
+      districtId,
+    });
+  } catch (error) {
+    console.error("[CREATE-DRAFT] Error creating draft:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to create application draft",
+      message: error.message,
+    });
+  }
+});
+
+// POST /api/applications - Create a new application draft (legacy MongoDB endpoint)
 router.post("/applications", async (req, res) => {
   try {
     const { schemeId } = req.body;
@@ -509,6 +551,120 @@ router.delete("/applications/cleanup/draft", async (req, res) => {
       message: "Error cleaning up draft applications",
       error: error.message,
     });
+  }
+});
+
+// GET /api/audio-result - Returns the newest ANALYZED record written by Lambda.
+// Deliberately ignores draft rows - only cares about records where ApplicationStatus = "ANALYZED".
+// Query Parameters:
+//   districtId (string, optional) - Partition key (default: district-001)
+//   since      (string, optional) - ISO timestamp; restricts results to records processed after this time.
+//                                   Pass the client-side upload time so stale previous-session rows are excluded.
+router.get("/audio-result", async (req, res) => {
+  try {
+    const { districtId = "district-001", since } = req.query;
+
+    console.log(`[AUDIO-RESULT] Querying for ANALYZED records in district: ${districtId}${since ? `, since: ${since}` : ""}`);
+
+    // Query the partition, newest first, looking only for ANALYZED records.
+    const command = new QueryCommand({
+      TableName: process.env.DYNAMODB_TABLE || "GFIS_Applications",
+      KeyConditionExpression: "DistrictID = :district",
+      FilterExpression: "ApplicationStatus = :analyzed",
+      ExpressionAttributeValues: {
+        ":district": districtId,
+        ":analyzed": "ANALYZED",
+      },
+      ScanIndexForward: false, // newest ApplicationID first
+      Limit: 10,
+    });
+
+    const result = await docClient.send(command);
+    let items = result.Items || [];
+
+    // Optionally restrict to records processed after the upload started.
+    // This prevents a stale ANALYZED row from a previous session firing immediately.
+    if (since && items.length > 0) {
+      const sinceMs = new Date(since).getTime();
+      if (!Number.isNaN(sinceMs)) {
+        const fresh = items.filter((item) => {
+          const ts = item.processedAt || item.CreatedAt || item.createdAt || item.updatedAt || "";
+          return ts ? new Date(ts).getTime() >= sinceMs : true;
+        });
+        // Only apply the filter when it leaves at least one result.
+        if (fresh.length > 0) items = fresh;
+      }
+    }
+
+    if (items.length === 0) {
+      console.log(`[AUDIO-RESULT] No ANALYZED record found yet`);
+      return res.json({
+        success: true,
+        processingStatus: "processing",
+        transcription: null,
+        extractedFields: {},
+      });
+    }
+
+    const item = items[0];
+    console.log(`[AUDIO-RESULT] Found ANALYZED record: ${item.ApplicationID}`);
+
+    res.json({
+      success: true,
+      applicationId: item.ApplicationID,
+      processingStatus: "ANALYZED",
+      transcription: item.Transcript || item.transcript || item.transcription || null,
+      extractedFields: item.aiAnalysis || item.extractedFields || {},
+      confidence: item.confidence || null,
+      riskLevel: item.riskLevel || null,
+      riskScore: item.RiskScore || null,
+      processedAt: item.processedAt || item.updatedAt || item.CreatedAt || null,
+    });
+  } catch (error) {
+    console.error("[AUDIO-RESULT] Error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch audio result",
+      message: error.message,
+    });
+  }
+});
+
+// GET /api/audio-result/latest - Retrieve the latest finalized audio result by district
+router.get("/audio-result/latest", async (req, res) => {
+  const districtId = req.query.districtId || "district-001";
+
+  try {
+    const params = {
+      TableName: process.env.DYNAMODB_TABLE,
+      KeyConditionExpression: "DistrictID = :district",
+      ExpressionAttributeValues: { ":district": districtId },
+      ScanIndexForward: false,
+      Limit: 25
+    };
+
+    const result = await docClient.query(params).promise();
+    const items = result?.Items || [];
+
+    const latestFinal = items.find((item) => {
+      const status = String(item.ApplicationStatus || "").toUpperCase();
+      const isFinal = status === "ANALYZED" || status === "COMPLETED";
+      return isFinal && (item.Transcript || item.aiAnalysis);
+    });
+
+    if (!latestFinal) {
+      return res.json({ processingStatus: "processing" });
+    }
+
+    return res.json({
+      applicationId: latestFinal.ApplicationID,
+      processingStatus: latestFinal.ApplicationStatus,
+      transcription: latestFinal.Transcript || "",
+      extractedFields: latestFinal.aiAnalysis || {}
+    });
+  } catch (err) {
+    console.error("Error fetching latest audio result:", err);
+    return res.status(500).json({ error: "Failed to fetch latest audio result" });
   }
 });
 
