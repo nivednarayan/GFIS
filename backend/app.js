@@ -15,7 +15,12 @@ const authRoutes = require("./routes/auth_routes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/gfis";
+const MONGODB_URI = process.env.MONGO_URI;
+
+if (!MONGODB_URI) {
+  console.error("FATAL: MONGO_URI is not set in .env");
+  process.exit(1);
+}
 
 // Middleware
 app.use(cors());
