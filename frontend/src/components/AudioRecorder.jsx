@@ -14,8 +14,6 @@ export default function AudioRecorder({
   const [error, setError] = useState('');
   const [isPolling, setIsPolling] = useState(false);
   const [processingStatus, setProcessingStatus] = useState(null);
-  const [transcription, setTranscription] = useState(null);
-  const [extractedFields, setExtractedFields] = useState(null);
   const pollingIntervalRef = useRef(null);
 
   const mediaRecorderRef = useRef(null);
@@ -40,8 +38,6 @@ export default function AudioRecorder({
     console.log(`[AUDIO-RECORDER] Starting to poll for ApplicationID: ${appId} since: ${uploadedAt}`);
     setIsPolling(true);
     setProcessingStatus('processing');
-    setTranscription(null);
-    setExtractedFields(null);
 
     const pollInterval = setInterval(async () => {
       try {
@@ -83,9 +79,6 @@ export default function AudioRecorder({
           console.log(`[AUDIO-RECORDER] Audio processing completed!`);
           console.log(`[AUDIO-RECORDER] Transcription:`, data.transcription);
           console.log(`[AUDIO-RECORDER] Extracted fields:`, data.extractedFields);
-
-          setTranscription(data.transcription);
-          setExtractedFields(data.extractedFields);
 
           // Emit transcript to parent component for chat integration
           if (onTranscriptReady) {
@@ -226,28 +219,6 @@ export default function AudioRecorder({
           <p style={{ margin: '0', fontSize: '0.9rem' }}>
             Status: <strong>{processingStatus || 'waiting'}</strong>
           </p>
-        </div>
-      )}
-
-      {transcription && (
-        <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#f1f8e9', borderRadius: '4px' }}>
-          <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>📝 Transcription</p>
-          <p style={{ margin: '0', fontSize: '0.9rem', wordWrap: 'break-word' }}>
-            {transcription}
-          </p>
-        </div>
-      )}
-
-      {extractedFields && Object.keys(extractedFields).length > 0 && (
-        <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#f3e5f5', borderRadius: '4px' }}>
-          <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>🎯 Extracted Fields</p>
-          <ul style={{ margin: '0', paddingLeft: '1rem', fontSize: '0.9rem' }}>
-            {Object.entries(extractedFields).map(([key, value]) => (
-              <li key={key}>
-                <strong>{key}:</strong> {String(value)}
-              </li>
-            ))}
-          </ul>
         </div>
       )}
 

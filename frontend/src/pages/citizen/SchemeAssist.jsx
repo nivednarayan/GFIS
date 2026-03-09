@@ -518,7 +518,7 @@ function SchemeAssist() {
   const { user } = useAuth();
   const recognitionRef = useRef(null);
   const latestChatInputRef = useRef('');
-  const voiceSessionBaseRef = useRef('');
+  const finalVoiceTranscriptRef = useRef('');
   const initializationRef = useRef(false); // Prevent React.StrictMode double initialization
   const speedChangeTimeoutRef = useRef(null); // Debounce speed changes
   const spokenMessagesIndexRef = useRef(-1); // Track last message that was spoken
@@ -1070,18 +1070,23 @@ function SchemeAssist() {
 
     recognition.onstart = () => {
       setIsListening(true);
-      voiceSessionBaseRef.current = latestChatInputRef.current.trim();
+      finalVoiceTranscriptRef.current = '';
+      setChatInput('');
       setVoiceStatus('Listening... speak now');
     };
 
     recognition.onresult = (event) => {
-      let transcriptChunk = '';
-
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcriptChunk += `${event.results[index][0].transcript} `;
+      let interimTranscript = '';
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const segment = event.results[index][0].transcript || '';
+        if (event.results[index].isFinal) {
+          finalVoiceTranscriptRef.current = `${finalVoiceTranscriptRef.current} ${segment}`.trim();
+        } else {
+          interimTranscript += `${segment} `;
+        }
       }
 
-      const nextInput = `${voiceSessionBaseRef.current} ${transcriptChunk}`.trim();
+      const nextInput = `${finalVoiceTranscriptRef.current} ${interimTranscript}`.trim();
       setChatInput(nextInput);
     };
 
@@ -1112,29 +1117,13 @@ function SchemeAssist() {
     };
   }, [speechSessionKey]);
 
-  /**
-   * Handle audio transcription result from AudioRecorder component
-   * 
-   * When transcription completes:
-   * - Append transcript as a user message to chat
-   * - Auto-populate collectedAnswers with extracted fields
-   * - Show detected fields in UI
-   * 
-   * Example:
-   * User records: "My name is Ashar, my Aadhaar is 1234567890123"
-   * 
-   * Chat displays:
-   * User: My name is Ashar, my Aadhaar is 1234567890123
-   * 
-   * Auto-filled fields:
-   * ✔ fullName: Ashar
-   * ✔ aadhaarNumber: 1234567890123
-   */
   const handleTranscriptReady = useCallback((transcript, extractedFields, streamedApplicationId) => {
     if (!transcript) {
       console.warn('[SCHEME-ASSIST] Empty transcript received');
       return;
     }
+
+    setChatInput(transcript.trim());
 
     if (streamedApplicationId) {
       setApplicationId((prev) => prev || streamedApplicationId);
@@ -1156,14 +1145,6 @@ function SchemeAssist() {
       streamedApplicationId,
     });
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: 'user',
-        text: `📝 From your audio: "${transcript}"`,
-      },
-    ]);
-
     if (extractedFields && typeof extractedFields === 'object' && Object.keys(extractedFields).length > 0) {
       setCollectedAnswers((prev) => {
         const updated = enforceLoggedInAadhaar({
@@ -1173,15 +1154,6 @@ function SchemeAssist() {
         setCurrentStepIndex(findNextMissingRequiredStep(updated));
         return updated;
       });
-
-      const detectedCount = Object.keys(extractedFields).length;
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'bot',
-          text: `✨ Detected ${detectedCount} field(s) from your audio. Continuing to fill remaining fields...`,
-        },
-      ]);
     }
   }, [applicationId, enforceLoggedInAadhaar, findNextMissingRequiredStep, persistLatestAutofillPayload]);
 
@@ -1525,6 +1497,9 @@ function SchemeAssist() {
     }
 
     try {
+      finalVoiceTranscriptRef.current = '';
+      latestChatInputRef.current = '';
+      setChatInput('');
       recognitionRef.current.start();
     } catch (err) {
       console.warn('Voice start failed:', err);
